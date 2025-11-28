@@ -476,9 +476,9 @@ export default function PreismodellePage() {
                       <div className="text-sm text-muted-foreground">
                         {billingPeriod === 'monthly' ? '/Monat' : '/Jahr'}
                       </div>
-                      {'weeklyPrice' in addon && (
+                      {'weeklyPrice' in addon && addon.weeklyPrice && (
                         <div className="text-xs text-muted-foreground mt-1">
-                          oder {formatCurrency(addon.weeklyPrice)}/Woche
+                          oder {formatCurrency(addon.weeklyPrice as number)}/Woche
                         </div>
                       )}
                     </div>

@@ -1,0 +1,14 @@
+{
+  "projects": {
+    "default": "benchtrust"
+  },
+  "targets": {
+    "benchtrust": {
+      "hosting": {
+        "budgetplanung": [
+          "benchtrust-budgetplanung"
+        ]
+      }
+    }
+  }
+}
