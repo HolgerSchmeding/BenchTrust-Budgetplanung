@@ -15,6 +15,15 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -23,547 +32,358 @@ import {
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { 
-  Calculator,
-  TrendingUp,
+  Plus,
+  Edit,
+  Trash2,
   TrendingDown,
   Euro,
-  PieChart,
-  BarChart3,
   Download,
   Calendar,
-  ChevronRight,
-  AlertCircle
+  Building2,
+  Wallet,
+  Server,
+  Megaphone,
+  Briefcase
 } from 'lucide-react';
 
-// Budget-Kategorien
-const budgetCategories = [
-  {
-    id: 'revenue',
-    name: 'Umsatzerlöse',
-    type: 'income',
-    items: [
-      { name: 'Subscription Revenue', budget: 25000, actual: 23615, variance: -1385 },
-      { name: 'Setup Fees', budget: 2000, actual: 2800, variance: 800 },
-      { name: 'Consulting', budget: 3000, actual: 2450, variance: -550 },
-    ],
-  },
-  {
-    id: 'personnel',
-    name: 'Personalkosten',
-    type: 'expense',
-    items: [
-      { name: 'Gehälter', budget: 12000, actual: 12000, variance: 0 },
-      { name: 'Sozialabgaben', budget: 2400, actual: 2380, variance: -20 },
-      { name: 'Weiterbildung', budget: 500, actual: 350, variance: -150 },
-    ],
-  },
-  {
-    id: 'infrastructure',
-    name: 'Infrastruktur',
-    type: 'expense',
-    items: [
-      { name: 'Cloud Hosting (AWS/GCP)', budget: 1500, actual: 1680, variance: 180 },
-      { name: 'SaaS Tools', budget: 800, actual: 920, variance: 120 },
-      { name: 'Domain & SSL', budget: 50, actual: 45, variance: -5 },
-    ],
-  },
-  {
-    id: 'marketing',
-    name: 'Marketing',
-    type: 'expense',
-    items: [
-      { name: 'Google Ads', budget: 2000, actual: 1850, variance: -150 },
-      { name: 'Content Marketing', budget: 500, actual: 480, variance: -20 },
-      { name: 'Events & Sponsoring', budget: 1000, actual: 0, variance: -1000 },
-    ],
-  },
-  {
-    id: 'operations',
-    name: 'Betrieb',
-    type: 'expense',
-    items: [
-      { name: 'Büro & Miete', budget: 1500, actual: 1500, variance: 0 },
-      { name: 'Versicherungen', budget: 200, actual: 195, variance: -5 },
-      { name: 'Rechts- & Steuerberatung', budget: 500, actual: 650, variance: 150 },
-      { name: 'Sonstige Kosten', budget: 300, actual: 280, variance: -20 },
-    ],
-  },
+const months = [
+  'Januar', 'Februar', 'März', 'April', 'Mai', 'Juni',
+  'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember'
 ];
 
-// Monatliche Entwicklung
-const monthlyData = [
-  { month: 'Jan', revenue: 18500, expenses: 15200, profit: 3300 },
-  { month: 'Feb', revenue: 19200, expenses: 15800, profit: 3400 },
-  { month: 'Mär', revenue: 20100, expenses: 16100, profit: 4000 },
-  { month: 'Apr', revenue: 21500, expenses: 16500, profit: 5000 },
-  { month: 'Mai', revenue: 22800, expenses: 17200, profit: 5600 },
-  { month: 'Jun', revenue: 23200, expenses: 17500, profit: 5700 },
-  { month: 'Jul', revenue: 24100, expenses: 17800, profit: 6300 },
-  { month: 'Aug', revenue: 25500, expenses: 18100, profit: 7400 },
-  { month: 'Sep', revenue: 26800, expenses: 18400, profit: 8400 },
-  { month: 'Okt', revenue: 27500, expenses: 18700, profit: 8800 },
-  { month: 'Nov', revenue: 28865, expenses: 19280, profit: 9585 },
-  { month: 'Dez', revenue: 30000, expenses: 19500, profit: 10500 },
+const costCategories = [
+  { id: 'personnel', name: 'Personalkosten', icon: 'users' },
+  { id: 'infrastructure', name: 'Infrastruktur', icon: 'server' },
+  { id: 'marketing', name: 'Marketing', icon: 'megaphone' },
+  { id: 'operations', name: 'Betrieb', icon: 'briefcase' },
+  { id: 'other', name: 'Sonstiges', icon: 'wallet' },
 ];
 
-// Formatierung
+interface MonthlyCost {
+  amount: number;
+}
+
+interface CostItem {
+  id: string;
+  name: string;
+  category: string;
+  description: string;
+  monthlyAmount: number;
+  startMonth: number;
+  endMonth: number;
+  monthlyCosts?: { [month: number]: MonthlyCost };
+}
+
+const initialCostItems: CostItem[] = [
+  { id: 'cost1', name: 'Gehälter', category: 'personnel', description: 'Löhne und Gehälter Mitarbeiter', monthlyAmount: 12000, startMonth: 0, endMonth: 11 },
+  { id: 'cost2', name: 'Sozialabgaben', category: 'personnel', description: 'AG-Anteile Sozialversicherung', monthlyAmount: 2400, startMonth: 0, endMonth: 11 },
+  { id: 'cost3', name: 'Weiterbildung', category: 'personnel', description: 'Schulungen und Kurse', monthlyAmount: 500, startMonth: 0, endMonth: 11 },
+  { id: 'cost4', name: 'Cloud Hosting', category: 'infrastructure', description: 'Server, Storage, CDN', monthlyAmount: 1500, startMonth: 0, endMonth: 11 },
+  { id: 'cost5', name: 'SaaS Tools', category: 'infrastructure', description: 'Slack, GitHub, Figma, etc.', monthlyAmount: 800, startMonth: 0, endMonth: 11 },
+  { id: 'cost6', name: 'Domain & SSL', category: 'infrastructure', description: 'Domains und Zertifikate', monthlyAmount: 50, startMonth: 0, endMonth: 11 },
+  { id: 'cost7', name: 'Google Ads', category: 'marketing', description: 'Suchmaschinenwerbung', monthlyAmount: 2000, startMonth: 0, endMonth: 11 },
+  { id: 'cost8', name: 'Content Marketing', category: 'marketing', description: 'Blog, Social Media, Content', monthlyAmount: 500, startMonth: 0, endMonth: 11 },
+  { id: 'cost9', name: 'Events & Sponsoring', category: 'marketing', description: 'Messen, Konferenzen', monthlyAmount: 1000, startMonth: 3, endMonth: 8 },
+  { id: 'cost10', name: 'Büro & Miete', category: 'operations', description: 'Büroräume und Nebenkosten', monthlyAmount: 1500, startMonth: 0, endMonth: 11 },
+  { id: 'cost11', name: 'Versicherungen', category: 'operations', description: 'Betriebsversicherungen', monthlyAmount: 200, startMonth: 0, endMonth: 11 },
+  { id: 'cost12', name: 'Rechts- & Steuerberatung', category: 'operations', description: 'Rechtsanwalt, Steuerberater', monthlyAmount: 500, startMonth: 0, endMonth: 11 },
+  { id: 'cost13', name: 'Sonstige Kosten', category: 'other', description: 'Diverse Ausgaben', monthlyAmount: 300, startMonth: 0, endMonth: 11 },
+];
+
 function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(amount);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(amount);
 }
 
-function getVarianceColor(variance: number, type: string): string {
-  if (type === 'income') {
-    return variance >= 0 ? 'text-green-600' : 'text-red-600';
+function getCostItemMonthlyAmount(item: CostItem, monthIndex: number): number {
+  if (monthIndex < item.startMonth || monthIndex > item.endMonth) return 0;
+  if (item.monthlyCosts && item.monthlyCosts[monthIndex]) return item.monthlyCosts[monthIndex].amount;
+  return item.monthlyAmount;
+}
+
+function getCostItemYearlyAmount(item: CostItem): number {
+  let total = 0;
+  for (let m = 0; m <= 11; m++) total += getCostItemMonthlyAmount(item, m);
+  return total;
+}
+
+function CategoryIcon({ category }: { category: string }) {
+  switch (category) {
+    case 'personnel': return <Building2 className="h-4 w-4" />;
+    case 'infrastructure': return <Server className="h-4 w-4" />;
+    case 'marketing': return <Megaphone className="h-4 w-4" />;
+    case 'operations': return <Briefcase className="h-4 w-4" />;
+    default: return <Wallet className="h-4 w-4" />;
   }
-  // Für Ausgaben ist negativ gut (unter Budget)
-  return variance <= 0 ? 'text-green-600' : 'text-red-600';
-}
-
-function getVarianceIcon(variance: number, type: string) {
-  const isPositive = type === 'income' ? variance >= 0 : variance <= 0;
-  return isPositive ? (
-    <TrendingUp className="h-4 w-4 text-green-600" />
-  ) : (
-    <TrendingDown className="h-4 w-4 text-red-600" />
-  );
 }
 
 export default function BudgetplanungPage() {
-  const [selectedMonth, setSelectedMonth] = useState('november');
-  const [selectedYear, setSelectedYear] = useState('2024');
+  const [costItems, setCostItems] = useState<CostItem[]>(initialCostItems);
+  const [isAddCostOpen, setIsAddCostOpen] = useState(false);
+  const [isEditCostOpen, setIsEditCostOpen] = useState(false);
+  const [editingCost, setEditingCost] = useState<CostItem | null>(null);
+  const [isDeleteCostOpen, setIsDeleteCostOpen] = useState(false);
+  const [deletingCost, setDeletingCost] = useState<CostItem | null>(null);
+  const [isCostPlanningOpen, setIsCostPlanningOpen] = useState(false);
+  const [planningCost, setPlanningCost] = useState<CostItem | null>(null);
+  const [newCost, setNewCost] = useState<Partial<CostItem>>({ name: '', category: 'operations', description: '', monthlyAmount: 0, startMonth: 0, endMonth: 11 });
 
-  // Berechnungen
-  const totalBudgetRevenue = budgetCategories
-    .filter(c => c.type === 'income')
-    .reduce((sum, c) => sum + c.items.reduce((s, i) => s + i.budget, 0), 0);
+  const totalYearlyCosts = costItems.reduce((sum, item) => sum + getCostItemYearlyAmount(item), 0);
+  const totalMonthlyCostsAvg = totalYearlyCosts / 12;
 
-  const totalActualRevenue = budgetCategories
-    .filter(c => c.type === 'income')
-    .reduce((sum, c) => sum + c.items.reduce((s, i) => s + i.actual, 0), 0);
+  const monthlyTotalCosts = months.map((_, monthIndex) => costItems.reduce((sum, item) => sum + getCostItemMonthlyAmount(item, monthIndex), 0));
 
-  const totalBudgetExpenses = budgetCategories
-    .filter(c => c.type === 'expense')
-    .reduce((sum, c) => sum + c.items.reduce((s, i) => s + i.budget, 0), 0);
+  const costsByCategory = costCategories.map(cat => ({
+    ...cat,
+    items: costItems.filter(item => item.category === cat.id),
+    total: costItems.filter(item => item.category === cat.id).reduce((sum, item) => sum + getCostItemYearlyAmount(item), 0),
+  })).filter(cat => cat.items.length > 0);
 
-  const totalActualExpenses = budgetCategories
-    .filter(c => c.type === 'expense')
-    .reduce((sum, c) => sum + c.items.reduce((s, i) => s + i.actual, 0), 0);
+  const handleAddCost = () => {
+    if (newCost.name && newCost.monthlyAmount !== undefined) {
+      const cost: CostItem = { id: `cost${Date.now()}`, name: newCost.name || '', category: newCost.category || 'other', description: newCost.description || '', monthlyAmount: newCost.monthlyAmount || 0, startMonth: newCost.startMonth || 0, endMonth: newCost.endMonth || 11 };
+      setCostItems([...costItems, cost]);
+      setIsAddCostOpen(false);
+      setNewCost({ name: '', category: 'operations', description: '', monthlyAmount: 0, startMonth: 0, endMonth: 11 });
+    }
+  };
 
-  const budgetProfit = totalBudgetRevenue - totalBudgetExpenses;
-  const actualProfit = totalActualRevenue - totalActualExpenses;
-
-  // YTD Daten
-  const ytdRevenue = monthlyData.slice(0, 11).reduce((sum, m) => sum + m.revenue, 0);
-  const ytdExpenses = monthlyData.slice(0, 11).reduce((sum, m) => sum + m.expenses, 0);
-  const ytdProfit = ytdRevenue - ytdExpenses;
+  const handleEditCost = (item: CostItem) => { setEditingCost({ ...item }); setIsEditCostOpen(true); };
+  const handleSaveEditCost = () => { if (editingCost) { setCostItems(costItems.map(c => c.id === editingCost.id ? editingCost : c)); setIsEditCostOpen(false); setEditingCost(null); } };
+  const handleDeleteCostClick = (item: CostItem) => { setDeletingCost(item); setIsDeleteCostOpen(true); };
+  const handleConfirmDeleteCost = () => { if (deletingCost) { setCostItems(costItems.filter(c => c.id !== deletingCost.id)); setIsDeleteCostOpen(false); setDeletingCost(null); } };
+  const handleOpenCostPlanning = (item: CostItem) => { setPlanningCost({ ...item }); setIsCostPlanningOpen(true); };
+  const handleSaveCostPlanning = () => { if (planningCost) { setCostItems(costItems.map(c => c.id === planningCost.id ? planningCost : c)); setIsCostPlanningOpen(false); setPlanningCost(null); } };
+  const handleUpdatePlanningPeriod = (startMonth: number, endMonth: number) => { if (planningCost) setPlanningCost({ ...planningCost, startMonth, endMonth }); };
+  const handleUpdateMonthlyCost = (monthIndex: number, amount: number | undefined) => {
+    if (planningCost) {
+      const newMonthlyCosts = planningCost.monthlyCosts ? { ...planningCost.monthlyCosts } : {};
+      if (amount === undefined || amount === planningCost.monthlyAmount) { delete newMonthlyCosts[monthIndex]; }
+      else { newMonthlyCosts[monthIndex] = { amount }; }
+      setPlanningCost({ ...planningCost, monthlyCosts: newMonthlyCosts });
+    }
+  };
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Budgetplanung & GuV</h1>
-          <p className="text-muted-foreground">
-            Planen und überwachen Sie Ihr Budget
-          </p>
+          <h1 className="text-3xl font-bold tracking-tight">Kostenplanung</h1>
+          <p className="text-muted-foreground">Planen Sie Ihre Kosten pro Monat und Kategorie</p>
         </div>
         <div className="flex items-center gap-2">
-          <Select value={selectedMonth} onValueChange={setSelectedMonth}>
-            <SelectTrigger className="w-[140px]">
-              <Calendar className="mr-2 h-4 w-4" />
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="januar">Januar</SelectItem>
-              <SelectItem value="februar">Februar</SelectItem>
-              <SelectItem value="maerz">März</SelectItem>
-              <SelectItem value="april">April</SelectItem>
-              <SelectItem value="mai">Mai</SelectItem>
-              <SelectItem value="juni">Juni</SelectItem>
-              <SelectItem value="juli">Juli</SelectItem>
-              <SelectItem value="august">August</SelectItem>
-              <SelectItem value="september">September</SelectItem>
-              <SelectItem value="oktober">Oktober</SelectItem>
-              <SelectItem value="november">November</SelectItem>
-              <SelectItem value="dezember">Dezember</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={selectedYear} onValueChange={setSelectedYear}>
-            <SelectTrigger className="w-[100px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="2024">2024</SelectItem>
-              <SelectItem value="2025">2025</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="outline">
-            <Download className="mr-2 h-4 w-4" />
-            Export
-          </Button>
+          <Button variant="outline"><Download className="mr-2 h-4 w-4" />Export</Button>
         </div>
       </div>
 
-      {/* Übersichtskarten */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Umsatz (Monat)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-600">
-              {formatCurrency(totalActualRevenue)}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-muted-foreground">
-                Budget: {formatCurrency(totalBudgetRevenue)}
-              </span>
-              <Badge variant={totalActualRevenue >= totalBudgetRevenue ? 'default' : 'destructive'}>
-                {((totalActualRevenue / totalBudgetRevenue) * 100).toFixed(0)}%
-              </Badge>
-            </div>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Euro className="h-4 w-4" />Jahreskosten gesamt</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold text-red-600">{formatCurrency(totalYearlyCosts)}</div><p className="text-xs text-muted-foreground">Geplante Gesamtkosten 2025</p></CardContent>
         </Card>
-        
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Ausgaben (Monat)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-600">
-              {formatCurrency(totalActualExpenses)}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-muted-foreground">
-                Budget: {formatCurrency(totalBudgetExpenses)}
-              </span>
-              <Badge variant={totalActualExpenses <= totalBudgetExpenses ? 'default' : 'destructive'}>
-                {((totalActualExpenses / totalBudgetExpenses) * 100).toFixed(0)}%
-              </Badge>
-            </div>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><TrendingDown className="h-4 w-4" />Ø Monatliche Kosten</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">{formatCurrency(totalMonthlyCostsAvg)}</div><p className="text-xs text-muted-foreground">Durchschnitt pro Monat</p></CardContent>
         </Card>
-        
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Ergebnis (Monat)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${actualProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(actualProfit)}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-muted-foreground">
-                Plan: {formatCurrency(budgetProfit)}
-              </span>
-              {actualProfit >= budgetProfit ? (
-                <TrendingUp className="h-4 w-4 text-green-600" />
-              ) : (
-                <TrendingDown className="h-4 w-4 text-red-600" />
-              )}
-            </div>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Building2 className="h-4 w-4" />Personalkosten</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">{formatCurrency(costsByCategory.find(c => c.id === 'personnel')?.total || 0)}</div><p className="text-xs text-muted-foreground">{((costsByCategory.find(c => c.id === 'personnel')?.total || 0) / totalYearlyCosts * 100).toFixed(0)}% der Gesamtkosten</p></CardContent>
         </Card>
-        
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              Ergebnis (YTD)
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className={`text-2xl font-bold ${ytdProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {formatCurrency(ytdProfit)}
-            </div>
-            <div className="flex items-center gap-2 mt-1">
-              <span className="text-sm text-muted-foreground">
-                Marge: {((ytdProfit / ytdRevenue) * 100).toFixed(1)}%
-              </span>
-            </div>
-          </CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2"><Wallet className="h-4 w-4" />Kostenpositionen</CardTitle></CardHeader>
+          <CardContent><div className="text-2xl font-bold">{costItems.length}</div><p className="text-xs text-muted-foreground">Aktive Positionen</p></CardContent>
         </Card>
       </div>
 
-      {/* Tabs für verschiedene Ansichten */}
-      <Tabs defaultValue="budget" className="space-y-4">
+      <Tabs defaultValue="costs" className="space-y-4">
         <TabsList>
-          <TabsTrigger value="budget">Budget vs. Ist</TabsTrigger>
-          <TabsTrigger value="guv">GuV Übersicht</TabsTrigger>
-          <TabsTrigger value="monthly">Monatsentwicklung</TabsTrigger>
+          <TabsTrigger value="costs" className="flex items-center gap-2"><Wallet className="h-4 w-4" />Kostenpositionen</TabsTrigger>
+          <TabsTrigger value="categories" className="flex items-center gap-2"><Briefcase className="h-4 w-4" />Nach Kategorie</TabsTrigger>
+          <TabsTrigger value="monthly" className="flex items-center gap-2"><Calendar className="h-4 w-4" />Monatsübersicht</TabsTrigger>
         </TabsList>
 
-        {/* Budget vs. Ist */}
-        <TabsContent value="budget" className="space-y-4">
-          {budgetCategories.map((category) => {
-            const categoryBudget = category.items.reduce((sum, i) => sum + i.budget, 0);
-            const categoryActual = category.items.reduce((sum, i) => sum + i.actual, 0);
-            const categoryVariance = categoryActual - categoryBudget;
-
-            return (
-              <Card key={category.id}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      {category.type === 'income' ? (
-                        <TrendingUp className="h-5 w-5 text-green-600" />
-                      ) : (
-                        <TrendingDown className="h-5 w-5 text-red-600" />
-                      )}
-                      {category.name}
-                    </CardTitle>
-                    <div className="flex items-center gap-4 text-sm">
-                      <span className="text-muted-foreground">
-                        Budget: {formatCurrency(categoryBudget)}
-                      </span>
-                      <span className="font-medium">
-                        Ist: {formatCurrency(categoryActual)}
-                      </span>
-                      <span className={getVarianceColor(categoryVariance, category.type)}>
-                        {categoryVariance >= 0 ? '+' : ''}{formatCurrency(categoryVariance)}
-                      </span>
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardContent>
-                  <div className="rounded-md border">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>Position</TableHead>
-                          <TableHead className="text-right">Budget</TableHead>
-                          <TableHead className="text-right">Ist</TableHead>
-                          <TableHead className="text-right">Abweichung</TableHead>
-                          <TableHead className="text-right">%</TableHead>
-                          <TableHead className="w-[50px]"></TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {category.items.map((item, index) => {
-                          const percentUsed = (item.actual / item.budget) * 100;
-                          return (
-                            <TableRow key={index}>
-                              <TableCell className="font-medium">{item.name}</TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                {formatCurrency(item.budget)}
-                              </TableCell>
-                              <TableCell className="text-right font-medium">
-                                {formatCurrency(item.actual)}
-                              </TableCell>
-                              <TableCell className={`text-right ${getVarianceColor(item.variance, category.type)}`}>
-                                {item.variance >= 0 ? '+' : ''}{formatCurrency(item.variance)}
-                              </TableCell>
-                              <TableCell className="text-right">
-                                <div className="flex items-center justify-end gap-2">
-                                  <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
-                                    <div 
-                                      className={`h-full rounded-full ${
-                                        category.type === 'expense'
-                                          ? percentUsed <= 100 ? 'bg-green-500' : 'bg-red-500'
-                                          : percentUsed >= 100 ? 'bg-green-500' : 'bg-amber-500'
-                                      }`}
-                                      style={{ width: `${Math.min(percentUsed, 100)}%` }}
-                                    />
-                                  </div>
-                                  <span className="text-sm w-12">
-                                    {percentUsed.toFixed(0)}%
-                                  </span>
-                                </div>
-                              </TableCell>
-                              <TableCell>
-                                {getVarianceIcon(item.variance, category.type)}
-                              </TableCell>
-                            </TableRow>
-                          );
-                        })}
-                      </TableBody>
-                    </Table>
-                  </div>
-                </CardContent>
-              </Card>
-            );
-          })}
-        </TabsContent>
-
-        {/* GuV Übersicht */}
-        <TabsContent value="guv" className="space-y-4">
+        <TabsContent value="costs">
           <Card>
             <CardHeader>
-              <CardTitle>Gewinn- und Verlustrechnung</CardTitle>
-              <CardDescription>November 2024</CardDescription>
+              <div className="flex items-center justify-between">
+                <div><CardTitle>Kostenpositionen</CardTitle><CardDescription>Alle geplanten Kosten mit Zeitraum und monatlicher Planung</CardDescription></div>
+                <Dialog open={isAddCostOpen} onOpenChange={setIsAddCostOpen}>
+                  <DialogTrigger asChild><Button><Plus className="mr-2 h-4 w-4" />Kostenposition hinzufügen</Button></DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader><DialogTitle>Neue Kostenposition</DialogTitle><DialogDescription>Fügen Sie eine neue Kostenposition hinzu</DialogDescription></DialogHeader>
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2"><Label>Bezeichnung</Label><Input placeholder="z.B. Cloud Hosting" value={newCost.name || ''} onChange={(e) => setNewCost({ ...newCost, name: e.target.value })} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label>Kategorie</Label><Select value={newCost.category} onValueChange={(value) => setNewCost({ ...newCost, category: value })}><SelectTrigger><SelectValue placeholder="Kategorie wählen" /></SelectTrigger><SelectContent>{costCategories.map((cat) => (<SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Monatlicher Betrag (€)</Label><Input type="number" min="0" value={newCost.monthlyAmount || ''} onChange={(e) => setNewCost({ ...newCost, monthlyAmount: parseFloat(e.target.value) || 0 })} /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label>Von (Startmonat)</Label><Select value={String(newCost.startMonth)} onValueChange={(value) => setNewCost({ ...newCost, startMonth: parseInt(value) })}><SelectTrigger><SelectValue placeholder="Monat wählen" /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)}>{month}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Bis (Endmonat)</Label><Select value={String(newCost.endMonth)} onValueChange={(value) => setNewCost({ ...newCost, endMonth: parseInt(value) })}><SelectTrigger><SelectValue placeholder="Monat wählen" /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)} disabled={index < (newCost.startMonth || 0)}>{month}</SelectItem>))}</SelectContent></Select></div>
+                      </div>
+                      <div className="space-y-2"><Label>Beschreibung (optional)</Label><Input placeholder="z.B. AWS, Azure, Google Cloud" value={newCost.description || ''} onChange={(e) => setNewCost({ ...newCost, description: e.target.value })} /></div>
+                    </div>
+                    <DialogFooter><Button variant="outline" onClick={() => setIsAddCostOpen(false)}>Abbrechen</Button><Button onClick={handleAddCost}>Hinzufügen</Button></DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               <div className="rounded-md border">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Position</TableHead>
-                      <TableHead className="text-right">Monat</TableHead>
-                      <TableHead className="text-right">YTD</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Bezeichnung</TableHead><TableHead>Kategorie</TableHead><TableHead>Zeitraum</TableHead><TableHead className="text-right">Monatlich</TableHead><TableHead className="text-right">Jahreskosten</TableHead><TableHead></TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {/* Umsatz */}
-                    <TableRow className="bg-green-50 dark:bg-green-950">
-                      <TableCell className="font-semibold">Umsatzerlöse</TableCell>
-                      <TableCell className="text-right font-semibold text-green-600">
-                        {formatCurrency(totalActualRevenue)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-green-600">
-                        {formatCurrency(ytdRevenue)}
-                      </TableCell>
-                    </TableRow>
-                    {budgetCategories
-                      .filter(c => c.type === 'income')
-                      .flatMap(c => c.items)
-                      .map((item, index) => (
-                        <TableRow key={index}>
-                          <TableCell className="pl-8">{item.name}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.actual)}</TableCell>
-                          <TableCell className="text-right">{formatCurrency(item.actual * 11)}</TableCell>
+                    {costItems.map((item) => {
+                      const category = costCategories.find(c => c.id === item.category);
+                      const yearlyAmount = getCostItemYearlyAmount(item);
+                      const hasCustomCosts = item.monthlyCosts && Object.keys(item.monthlyCosts).length > 0;
+                      return (
+                        <TableRow key={item.id}>
+                          <TableCell><div className="flex items-center gap-2"><CategoryIcon category={item.category} /><div><div className="font-medium">{item.name}</div>{item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}</div></div></TableCell>
+                          <TableCell><div className="flex items-center gap-2"><Badge variant="outline">{category?.name}</Badge>{hasCustomCosts && <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">Individuell</Badge>}</div></TableCell>
+                          <TableCell><div className="text-sm">{months[item.startMonth].substring(0, 3)} - {months[item.endMonth].substring(0, 3)}</div><div className="text-xs text-muted-foreground">{item.endMonth - item.startMonth + 1} Monate</div></TableCell>
+                          <TableCell className="text-right font-medium">{formatCurrency(item.monthlyAmount)}</TableCell>
+                          <TableCell className="text-right font-medium text-red-600">{formatCurrency(yearlyAmount)}</TableCell>
+                          <TableCell><div className="flex gap-1"><Button variant="ghost" size="sm" onClick={() => handleOpenCostPlanning(item)} title="Monatliche Planung"><Calendar className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handleEditCost(item)} title="Bearbeiten"><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handleDeleteCostClick(item)} title="Löschen"><Trash2 className="h-4 w-4" /></Button></div></TableCell>
                         </TableRow>
-                      ))
-                    }
-
-                    {/* Kosten */}
-                    <TableRow className="bg-red-50 dark:bg-red-950">
-                      <TableCell className="font-semibold">Betriebsausgaben</TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">
-                        {formatCurrency(totalActualExpenses)}
-                      </TableCell>
-                      <TableCell className="text-right font-semibold text-red-600">
-                        {formatCurrency(ytdExpenses)}
-                      </TableCell>
-                    </TableRow>
-                    {budgetCategories
-                      .filter(c => c.type === 'expense')
-                      .map((category) => (
-                        <React.Fragment key={category.id}>
-                          <TableRow className="bg-muted/30">
-                            <TableCell className="pl-4 font-medium">{category.name}</TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(category.items.reduce((s, i) => s + i.actual, 0))}
-                            </TableCell>
-                            <TableCell className="text-right">
-                              {formatCurrency(category.items.reduce((s, i) => s + i.actual, 0) * 11)}
-                            </TableCell>
-                          </TableRow>
-                          {category.items.map((item, index) => (
-                            <TableRow key={`${category.id}-${index}`}>
-                              <TableCell className="pl-8 text-muted-foreground">
-                                {item.name}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                {formatCurrency(item.actual)}
-                              </TableCell>
-                              <TableCell className="text-right text-muted-foreground">
-                                {formatCurrency(item.actual * 11)}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </React.Fragment>
-                      ))
-                    }
-
-                    {/* Ergebnis */}
-                    <TableRow className="bg-primary/10 font-bold text-lg">
-                      <TableCell>Betriebsergebnis (EBIT)</TableCell>
-                      <TableCell className={`text-right ${actualProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(actualProfit)}
-                      </TableCell>
-                      <TableCell className={`text-right ${ytdProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                        {formatCurrency(ytdProfit)}
-                      </TableCell>
-                    </TableRow>
+                      );
+                    })}
+                    <TableRow className="bg-muted/50 font-medium"><TableCell colSpan={4}>Gesamt Jahreskosten</TableCell><TableCell className="text-right text-red-600">{formatCurrency(totalYearlyCosts)}</TableCell><TableCell></TableCell></TableRow>
                   </TableBody>
                 </Table>
               </div>
+
+              <Dialog open={isEditCostOpen} onOpenChange={setIsEditCostOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader><DialogTitle>Kostenposition bearbeiten</DialogTitle><DialogDescription>Ändern Sie die Daten der Kostenposition</DialogDescription></DialogHeader>
+                  {editingCost && (
+                    <div className="grid gap-4 py-4">
+                      <div className="space-y-2"><Label>Bezeichnung</Label><Input value={editingCost.name} onChange={(e) => setEditingCost({ ...editingCost, name: e.target.value })} /></div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label>Kategorie</Label><Select value={editingCost.category} onValueChange={(value) => setEditingCost({ ...editingCost, category: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{costCategories.map((cat) => (<SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Monatlicher Betrag (€)</Label><Input type="number" min="0" value={editingCost.monthlyAmount} onChange={(e) => setEditingCost({ ...editingCost, monthlyAmount: parseFloat(e.target.value) || 0 })} /></div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2"><Label>Von (Startmonat)</Label><Select value={String(editingCost.startMonth)} onValueChange={(value) => setEditingCost({ ...editingCost, startMonth: parseInt(value) })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)}>{month}</SelectItem>))}</SelectContent></Select></div>
+                        <div className="space-y-2"><Label>Bis (Endmonat)</Label><Select value={String(editingCost.endMonth)} onValueChange={(value) => setEditingCost({ ...editingCost, endMonth: parseInt(value) })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)} disabled={index < editingCost.startMonth}>{month}</SelectItem>))}</SelectContent></Select></div>
+                      </div>
+                      <div className="space-y-2"><Label>Beschreibung</Label><Input value={editingCost.description} onChange={(e) => setEditingCost({ ...editingCost, description: e.target.value })} /></div>
+                    </div>
+                  )}
+                  <DialogFooter><Button variant="outline" onClick={() => { setIsEditCostOpen(false); setEditingCost(null); }}>Abbrechen</Button><Button onClick={handleSaveEditCost}>Änderungen speichern</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isDeleteCostOpen} onOpenChange={setIsDeleteCostOpen}>
+                <DialogContent className="sm:max-w-[400px]">
+                  <DialogHeader><DialogTitle>Kostenposition löschen</DialogTitle><DialogDescription>Möchten Sie diese Kostenposition wirklich löschen?</DialogDescription></DialogHeader>
+                  {deletingCost && (<div className="py-4"><div className="flex items-center gap-3 p-3 bg-muted rounded-lg"><CategoryIcon category={deletingCost.category} /><div><div className="font-medium">{deletingCost.name}</div><div className="text-sm text-muted-foreground">{formatCurrency(deletingCost.monthlyAmount)}/Monat</div></div></div></div>)}
+                  <DialogFooter><Button variant="outline" onClick={() => { setIsDeleteCostOpen(false); setDeletingCost(null); }}>Abbrechen</Button><Button variant="destructive" onClick={handleConfirmDeleteCost}>Löschen</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={isCostPlanningOpen} onOpenChange={setIsCostPlanningOpen}>
+                <DialogContent className="sm:max-w-[800px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader><DialogTitle className="flex items-center gap-2"><Calendar className="h-5 w-5" />Kostenplanung: {planningCost?.name}</DialogTitle><DialogDescription>Planen Sie die Kosten pro Monat. Änderungen werden erst beim Speichern übernommen.</DialogDescription></DialogHeader>
+                  {planningCost && (
+                    <div className="space-y-6 py-4">
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <Label className="text-sm font-medium mb-3 block">Aktiver Zeitraum</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2"><Label className="text-xs text-muted-foreground">Von</Label><Select value={String(planningCost.startMonth)} onValueChange={(value) => handleUpdatePlanningPeriod(parseInt(value), planningCost.endMonth)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)}>{month}</SelectItem>))}</SelectContent></Select></div>
+                          <div className="space-y-2"><Label className="text-xs text-muted-foreground">Bis</Label><Select value={String(planningCost.endMonth)} onValueChange={(value) => handleUpdatePlanningPeriod(planningCost.startMonth, parseInt(value))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{months.map((month, index) => (<SelectItem key={index} value={String(index)} disabled={index < planningCost.startMonth}>{month}</SelectItem>))}</SelectContent></Select></div>
+                        </div>
+                      </div>
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <Label className="text-sm font-medium mb-3 block">Standard-Monatsbetrag</Label>
+                        <div className="flex items-center gap-4"><Input type="number" className="w-40" value={planningCost.monthlyAmount} onChange={(e) => setPlanningCost({ ...planningCost, monthlyAmount: parseFloat(e.target.value) || 0 })} /><span className="text-sm text-muted-foreground">€ pro Monat (wenn nicht individuell überschrieben)</span></div>
+                      </div>
+                      <div>
+                        <Label className="text-sm font-medium mb-3 block">Monatliche Kosten</Label>
+                        <div className="rounded-md border overflow-hidden">
+                          <Table>
+                            <TableHeader><TableRow><TableHead className="w-[100px]">Monat</TableHead><TableHead>Individueller Betrag (€)</TableHead><TableHead className="text-right w-[120px]">Kosten</TableHead></TableRow></TableHeader>
+                            <TableBody>
+                              {months.map((month, monthIndex) => {
+                                const isActive = monthIndex >= planningCost.startMonth && monthIndex <= planningCost.endMonth;
+                                const override = planningCost.monthlyCosts?.[monthIndex];
+                                const customAmount = override?.amount;
+                                const amount = isActive ? getCostItemMonthlyAmount(planningCost, monthIndex) : 0;
+                                return (
+                                  <TableRow key={monthIndex} className={!isActive ? 'opacity-40 bg-muted/30' : ''}>
+                                    <TableCell className="font-medium">{month.substring(0, 3)}</TableCell>
+                                    <TableCell>{isActive ? (<Input type="number" className="h-8 w-40" placeholder={`${planningCost.monthlyAmount} (Standard)`} value={customAmount !== undefined ? customAmount : ''} onChange={(e) => { const value = e.target.value; if (value === '') { handleUpdateMonthlyCost(monthIndex, undefined); } else { handleUpdateMonthlyCost(monthIndex, parseFloat(value)); } }} />) : <span className="text-muted-foreground">-</span>}</TableCell>
+                                    <TableCell className="text-right font-medium">{isActive ? (<span className={customAmount !== undefined ? 'text-blue-600' : 'text-red-600'}>{formatCurrency(amount)}</span>) : <span className="text-muted-foreground">-</span>}</TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                              <TableRow className="bg-muted/50 font-medium"><TableCell colSpan={2}>Jahreskosten gesamt</TableCell><TableCell className="text-right text-red-600">{formatCurrency(getCostItemYearlyAmount(planningCost))}</TableCell></TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">💡 Tipp: Lassen Sie das Feld leer, um den Standard-Monatsbetrag zu verwenden.</p>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter><Button variant="outline" onClick={() => { setIsCostPlanningOpen(false); setPlanningCost(null); }}>Abbrechen</Button><Button onClick={handleSaveCostPlanning}>Planung speichern</Button></DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </TabsContent>
 
-        {/* Monatsentwicklung */}
-        <TabsContent value="monthly" className="space-y-4">
+        <TabsContent value="categories" className="space-y-4">
+          {costsByCategory.map((category) => (
+            <Card key={category.id}>
+              <CardHeader className="pb-2">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg flex items-center gap-2"><CategoryIcon category={category.id} />{category.name}</CardTitle>
+                  <div className="flex items-center gap-4 text-sm"><span className="font-medium text-red-600">{formatCurrency(category.total)}</span><Badge variant="outline">{((category.total / totalYearlyCosts) * 100).toFixed(0)}%</Badge></div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader><TableRow><TableHead>Position</TableHead><TableHead>Zeitraum</TableHead><TableHead className="text-right">Monatlich</TableHead><TableHead className="text-right">Jahreskosten</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {category.items.map((item) => {
+                        const yearlyAmount = getCostItemYearlyAmount(item);
+                        return (
+                          <TableRow key={item.id}>
+                            <TableCell><div className="font-medium">{item.name}</div>{item.description && <div className="text-xs text-muted-foreground">{item.description}</div>}</TableCell>
+                            <TableCell><span className="text-sm">{months[item.startMonth].substring(0, 3)} - {months[item.endMonth].substring(0, 3)}</span></TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.monthlyAmount)}</TableCell>
+                            <TableCell className="text-right font-medium text-red-600">{formatCurrency(yearlyAmount)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+
+        <TabsContent value="monthly">
           <Card>
-            <CardHeader>
-              <CardTitle>Monatliche Entwicklung 2024</CardTitle>
-              <CardDescription>Umsatz, Kosten und Ergebnis pro Monat</CardDescription>
-            </CardHeader>
+            <CardHeader><CardTitle>Monatliche Kostenentwicklung</CardTitle><CardDescription>Geplante Kosten pro Monat nach Kategorie</CardDescription></CardHeader>
             <CardContent>
               <div className="rounded-md border">
                 <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Monat</TableHead>
-                      <TableHead className="text-right">Umsatz</TableHead>
-                      <TableHead className="text-right">Kosten</TableHead>
-                      <TableHead className="text-right">Ergebnis</TableHead>
-                      <TableHead className="text-right">Marge</TableHead>
-                      <TableHead className="text-right">Trend</TableHead>
-                    </TableRow>
-                  </TableHeader>
+                  <TableHeader><TableRow><TableHead>Monat</TableHead>{costsByCategory.map(cat => (<TableHead key={cat.id} className="text-right">{cat.name}</TableHead>))}<TableHead className="text-right font-bold">Gesamt</TableHead></TableRow></TableHeader>
                   <TableBody>
-                    {monthlyData.map((month, index) => {
-                      const margin = (month.profit / month.revenue) * 100;
-                      const prevProfit = index > 0 ? monthlyData[index - 1].profit : month.profit;
-                      const trend = month.profit - prevProfit;
-
+                    {months.map((month, monthIndex) => {
+                      const categoryTotals = costsByCategory.map(cat => ({ id: cat.id, total: cat.items.reduce((sum, item) => sum + getCostItemMonthlyAmount(item, monthIndex), 0) }));
+                      const monthTotal = monthlyTotalCosts[monthIndex];
                       return (
-                        <TableRow key={month.month}>
-                          <TableCell className="font-medium">{month.month}</TableCell>
-                          <TableCell className="text-right text-green-600">
-                            {formatCurrency(month.revenue)}
-                          </TableCell>
-                          <TableCell className="text-right text-red-600">
-                            {formatCurrency(month.expenses)}
-                          </TableCell>
-                          <TableCell className={`text-right font-medium ${month.profit >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                            {formatCurrency(month.profit)}
-                          </TableCell>
-                          <TableCell className="text-right">
-                            {margin.toFixed(1)}%
-                          </TableCell>
-                          <TableCell className="text-right">
-                            <div className="flex items-center justify-end gap-1">
-                              {trend >= 0 ? (
-                                <TrendingUp className="h-4 w-4 text-green-600" />
-                              ) : (
-                                <TrendingDown className="h-4 w-4 text-red-600" />
-                              )}
-                              <span className={trend >= 0 ? 'text-green-600' : 'text-red-600'}>
-                                {trend >= 0 ? '+' : ''}{formatCurrency(trend)}
-                              </span>
-                            </div>
-                          </TableCell>
+                        <TableRow key={monthIndex}>
+                          <TableCell className="font-medium">{month}</TableCell>
+                          {categoryTotals.map(cat => (<TableCell key={cat.id} className="text-right text-muted-foreground">{cat.total > 0 ? formatCurrency(cat.total) : '-'}</TableCell>))}
+                          <TableCell className="text-right font-medium text-red-600">{formatCurrency(monthTotal)}</TableCell>
                         </TableRow>
                       );
                     })}
-                    <TableRow className="bg-muted/50 font-bold">
-                      <TableCell>Gesamt</TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {formatCurrency(monthlyData.reduce((s, m) => s + m.revenue, 0))}
-                      </TableCell>
-                      <TableCell className="text-right text-red-600">
-                        {formatCurrency(monthlyData.reduce((s, m) => s + m.expenses, 0))}
-                      </TableCell>
-                      <TableCell className="text-right text-green-600">
-                        {formatCurrency(monthlyData.reduce((s, m) => s + m.profit, 0))}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        {((monthlyData.reduce((s, m) => s + m.profit, 0) / 
-                           monthlyData.reduce((s, m) => s + m.revenue, 0)) * 100).toFixed(1)}%
-                      </TableCell>
-                      <TableCell></TableCell>
-                    </TableRow>
+                    <TableRow className="bg-muted/50 font-medium"><TableCell>Jahressumme</TableCell>{costsByCategory.map(cat => (<TableCell key={cat.id} className="text-right">{formatCurrency(cat.total)}</TableCell>))}<TableCell className="text-right text-red-600">{formatCurrency(totalYearlyCosts)}</TableCell></TableRow>
                   </TableBody>
                 </Table>
               </div>

@@ -66,6 +66,12 @@ const months = [
 ];
 
 // Signed Customers (aus Buchhaltung importiert)
+interface MonthlyRevenue {
+  pricingModel: string;
+  addOns: string[];
+  customAmount?: number; // Optionaler manueller Betrag
+}
+
 interface SignedCustomer {
   id: string;
   companyName: string;
@@ -73,9 +79,11 @@ interface SignedCustomer {
   pricingModel: string;
   addOns: string[];
   startMonth: number; // 0-11
+  endMonth: number; // 0-11 (neu: Endmonat)
   contractType: 'monthly' | 'yearly';
   status: 'active' | 'churned' | 'paused';
   signedDate: string;
+  monthlyRevenues?: { [month: number]: MonthlyRevenue }; // Monatliche Überschreibungen
 }
 
 // Prospects (geplant)
@@ -99,6 +107,7 @@ const initialSignedCustomers: SignedCustomer[] = [
     pricingModel: 'lead-engine',
     addOns: ['dynamic-placement'],
     startMonth: 0,
+    endMonth: 11,
     contractType: 'yearly',
     status: 'active',
     signedDate: '2024-11-15',
@@ -110,6 +119,7 @@ const initialSignedCustomers: SignedCustomer[] = [
     pricingModel: 'lead-engine',
     addOns: [],
     startMonth: 0,
+    endMonth: 11,
     contractType: 'yearly',
     status: 'active',
     signedDate: '2024-12-01',
@@ -121,6 +131,7 @@ const initialSignedCustomers: SignedCustomer[] = [
     pricingModel: 'showcase-api',
     addOns: ['featured-deal'],
     startMonth: 1,
+    endMonth: 11,
     contractType: 'monthly',
     status: 'active',
     signedDate: '2025-01-10',
@@ -132,6 +143,7 @@ const initialSignedCustomers: SignedCustomer[] = [
     pricingModel: 'showcase',
     addOns: [],
     startMonth: 2,
+    endMonth: 11,
     contractType: 'yearly',
     status: 'active',
     signedDate: '2025-02-01',
@@ -143,6 +155,7 @@ const initialSignedCustomers: SignedCustomer[] = [
     pricingModel: 'lead-engine',
     addOns: ['dynamic-placement', 'featured-deal'],
     startMonth: 0,
+    endMonth: 11,
     contractType: 'yearly',
     status: 'active',
     signedDate: '2024-10-20',
@@ -240,11 +253,35 @@ function calculateYearlyRevenue(
   pricingModelId: string, 
   addOnIds: string[], 
   contractType: 'monthly' | 'yearly',
-  startMonth: number
+  startMonth: number,
+  endMonth: number = 11
 ): number {
   const monthlyRevenue = calculateMonthlyRevenue(pricingModelId, addOnIds, contractType);
-  const activeMonths = 12 - startMonth; // Monate ab Start bis Jahresende
+  const activeMonths = endMonth - startMonth + 1; // Monate von Start bis Ende (inklusiv)
   return monthlyRevenue * activeMonths;
+}
+
+// Berechnet den Umsatz für einen bestimmten Monat eines Kunden
+function getCustomerMonthlyRevenue(
+  customer: SignedCustomer,
+  monthIndex: number
+): number {
+  // Prüfen ob der Monat im aktiven Zeitraum liegt
+  if (monthIndex < customer.startMonth || monthIndex > customer.endMonth) {
+    return 0;
+  }
+  
+  // Prüfen ob es eine monatliche Überschreibung gibt
+  if (customer.monthlyRevenues && customer.monthlyRevenues[monthIndex]) {
+    const override = customer.monthlyRevenues[monthIndex];
+    if (override.customAmount !== undefined) {
+      return override.customAmount;
+    }
+    return calculateMonthlyRevenue(override.pricingModel, override.addOns, customer.contractType);
+  }
+  
+  // Standard: Basis-Preismodell des Kunden
+  return calculateMonthlyRevenue(customer.pricingModel, customer.addOns, customer.contractType);
 }
 
 export default function KundenplanungPage() {
@@ -253,6 +290,12 @@ export default function KundenplanungPage() {
   const [isAddProspectOpen, setIsAddProspectOpen] = useState(false);
   const [isEditProspectOpen, setIsEditProspectOpen] = useState(false);
   const [editingProspect, setEditingProspect] = useState<Prospect | null>(null);
+  const [isEditCustomerOpen, setIsEditCustomerOpen] = useState(false);
+  const [editingCustomer, setEditingCustomer] = useState<SignedCustomer | null>(null);
+  const [isDeleteCustomerOpen, setIsDeleteCustomerOpen] = useState(false);
+  const [deletingCustomer, setDeletingCustomer] = useState<SignedCustomer | null>(null);
+  const [isRevenuePlanningOpen, setIsRevenuePlanningOpen] = useState(false);
+  const [planningCustomer, setPlanningCustomer] = useState<SignedCustomer | null>(null);
   const [newProspect, setNewProspect] = useState<Partial<Prospect>>({
     count: 1,
     pricingModel: 'showcase',
@@ -267,12 +310,12 @@ export default function KundenplanungPage() {
   const signedRevenue = signedCustomers
     .filter(c => c.status === 'active')
     .reduce((sum, customer) => {
-      return sum + calculateYearlyRevenue(
-        customer.pricingModel, 
-        customer.addOns, 
-        customer.contractType,
-        customer.startMonth
-      );
+      // Summiere alle Monatsumsätze
+      let customerTotal = 0;
+      for (let m = 0; m <= 11; m++) {
+        customerTotal += getCustomerMonthlyRevenue(customer, m);
+      }
+      return sum + customerTotal;
     }, 0);
 
   // Berechnungen für Prospects (gewichtet nach Conversion-Probability)
@@ -306,15 +349,11 @@ export default function KundenplanungPage() {
 
   // Monatliche Umsatzverteilung berechnen
   const monthlyRevenueData = months.map((_, monthIndex) => {
-    // Signed Revenue für diesen Monat
+    // Signed Revenue für diesen Monat (mit Zeitraum und monatlichen Überschreibungen)
     const signedMonthly = signedCustomers
-      .filter(c => c.status === 'active' && c.startMonth <= monthIndex)
+      .filter(c => c.status === 'active')
       .reduce((sum, customer) => {
-        return sum + calculateMonthlyRevenue(
-          customer.pricingModel,
-          customer.addOns,
-          customer.contractType
-        );
+        return sum + getCustomerMonthlyRevenue(customer, monthIndex);
       }, 0);
 
     // Prospect Revenue für diesen Monat (gewichtet)
@@ -336,6 +375,55 @@ export default function KundenplanungPage() {
       total: signedMonthly + prospectMonthly,
     };
   });
+
+  // Handler für Umsatzplanung öffnen
+  const handleOpenRevenuePlanning = (customer: SignedCustomer) => {
+    setPlanningCustomer({ ...customer });
+    setIsRevenuePlanningOpen(true);
+  };
+
+  // Handler für Umsatzplanung speichern
+  const handleSaveRevenuePlanning = () => {
+    if (planningCustomer) {
+      setSignedCustomers(signedCustomers.map(c => 
+        c.id === planningCustomer.id ? planningCustomer : c
+      ));
+      setIsRevenuePlanningOpen(false);
+      setPlanningCustomer(null);
+    }
+  };
+
+  // Handler für Zeitraum-Update in Planung
+  const handleUpdatePlanningPeriod = (startMonth: number, endMonth: number) => {
+    if (planningCustomer) {
+      setPlanningCustomer({
+        ...planningCustomer,
+        startMonth,
+        endMonth
+      });
+    }
+  };
+
+  // Handler für monatlichen Umsatz Update
+  const handleUpdateMonthlyRevenue = (monthIndex: number, pricingModel: string, customAmount?: number) => {
+    if (planningCustomer) {
+      const newMonthlyRevenues = planningCustomer.monthlyRevenues ? { ...planningCustomer.monthlyRevenues } : {};
+      if (pricingModel === planningCustomer.pricingModel && customAmount === undefined) {
+        // Zurück zum Standard - Eintrag löschen
+        delete newMonthlyRevenues[monthIndex];
+      } else {
+        newMonthlyRevenues[monthIndex] = {
+          pricingModel,
+          addOns: planningCustomer.addOns,
+          customAmount
+        };
+      }
+      setPlanningCustomer({
+        ...planningCustomer,
+        monthlyRevenues: newMonthlyRevenues
+      });
+    }
+  };
 
   const handleAddProspect = () => {
     if (newProspect.pricingModel && newProspect.count) {
@@ -379,6 +467,35 @@ export default function KundenplanungPage() {
       ));
       setIsEditProspectOpen(false);
       setEditingProspect(null);
+    }
+  };
+
+  // Signed Customer handlers
+  const handleEditCustomer = (customer: SignedCustomer) => {
+    setEditingCustomer({ ...customer });
+    setIsEditCustomerOpen(true);
+  };
+
+  const handleSaveEditCustomer = () => {
+    if (editingCustomer) {
+      setSignedCustomers(signedCustomers.map(c => 
+        c.id === editingCustomer.id ? editingCustomer : c
+      ));
+      setIsEditCustomerOpen(false);
+      setEditingCustomer(null);
+    }
+  };
+
+  const handleDeleteCustomerClick = (customer: SignedCustomer) => {
+    setDeletingCustomer(customer);
+    setIsDeleteCustomerOpen(true);
+  };
+
+  const handleConfirmDeleteCustomer = () => {
+    if (deletingCustomer) {
+      setSignedCustomers(signedCustomers.filter(c => c.id !== deletingCustomer.id));
+      setIsDeleteCustomerOpen(false);
+      setDeletingCustomer(null);
     }
   };
 
@@ -527,12 +644,12 @@ export default function KundenplanungPage() {
                     <TableRow>
                       <TableHead>Unternehmen</TableHead>
                       <TableHead>Preismodell</TableHead>
-                      <TableHead>Add-ons</TableHead>
                       <TableHead>Vertrag</TableHead>
-                      <TableHead>Start</TableHead>
+                      <TableHead>Zeitraum</TableHead>
                       <TableHead className="text-right">Monatlich</TableHead>
                       <TableHead className="text-right">Jahresumsatz</TableHead>
                       <TableHead>Status</TableHead>
+                      <TableHead></TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -543,12 +660,12 @@ export default function KundenplanungPage() {
                         customer.addOns,
                         customer.contractType
                       );
-                      const yearlyRev = calculateYearlyRevenue(
-                        customer.pricingModel,
-                        customer.addOns,
-                        customer.contractType,
-                        customer.startMonth
-                      );
+                      // Berechne den tatsächlichen Jahresumsatz basierend auf monatlichen Werten
+                      let customerYearlyRev = 0;
+                      for (let m = 0; m <= 11; m++) {
+                        customerYearlyRev += getCustomerMonthlyRevenue(customer, m);
+                      }
+                      const hasCustomRevenues = customer.monthlyRevenues && Object.keys(customer.monthlyRevenues).length > 0;
 
                       return (
                         <TableRow key={customer.id}>
@@ -564,35 +681,33 @@ export default function KundenplanungPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline">{model?.name}</Badge>
-                          </TableCell>
-                          <TableCell>
-                            {customer.addOns.length > 0 ? (
-                              <div className="flex flex-wrap gap-1">
-                                {customer.addOns.map(addOnId => {
-                                  const addOn = addOns.find(a => a.id === addOnId);
-                                  return (
-                                    <Badge key={addOnId} variant="secondary" className="text-xs">
-                                      {addOn?.name}
-                                    </Badge>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <span className="text-muted-foreground text-sm">-</span>
-                            )}
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{model?.name}</Badge>
+                              {hasCustomRevenues && (
+                                <Badge variant="secondary" className="text-xs bg-blue-100 text-blue-700">
+                                  Individuell
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Badge variant={customer.contractType === 'yearly' ? 'default' : 'outline'}>
                               {customer.contractType === 'yearly' ? 'Jährlich' : 'Monatlich'}
                             </Badge>
                           </TableCell>
-                          <TableCell>{months[customer.startMonth]}</TableCell>
+                          <TableCell>
+                            <div className="text-sm">
+                              {months[customer.startMonth].substring(0, 3)} - {months[customer.endMonth].substring(0, 3)}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {customer.endMonth - customer.startMonth + 1} Monate
+                            </div>
+                          </TableCell>
                           <TableCell className="text-right font-medium">
                             {formatCurrency(monthlyRev)}
                           </TableCell>
                           <TableCell className="text-right font-medium text-green-600">
-                            {formatCurrency(yearlyRev)}
+                            {formatCurrency(customerYearlyRev)}
                           </TableCell>
                           <TableCell>
                             <Badge 
@@ -602,11 +717,39 @@ export default function KundenplanungPage() {
                               {customer.status === 'active' ? 'Aktiv' : customer.status}
                             </Badge>
                           </TableCell>
+                          <TableCell>
+                            <div className="flex gap-1">
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleOpenRevenuePlanning(customer)}
+                                title="Umsatzplanung"
+                              >
+                                <Calendar className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleEditCustomer(customer)}
+                                title="Bearbeiten"
+                              >
+                                <Edit className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                variant="ghost" 
+                                size="sm"
+                                onClick={() => handleDeleteCustomerClick(customer)}
+                                title="Löschen"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </TableCell>
                         </TableRow>
                       );
                     })}
                     <TableRow className="bg-muted/50 font-medium">
-                      <TableCell colSpan={5}>Gesamt Signed Revenue</TableCell>
+                      <TableCell colSpan={4}>Gesamt Signed Revenue</TableCell>
                       <TableCell className="text-right">
                         {formatCurrency(signedCustomers.reduce((sum, c) => 
                           sum + calculateMonthlyRevenue(c.pricingModel, c.addOns, c.contractType), 0
@@ -616,10 +759,373 @@ export default function KundenplanungPage() {
                         {formatCurrency(signedRevenue)}
                       </TableCell>
                       <TableCell></TableCell>
+                      <TableCell></TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </div>
+
+              {/* Edit Customer Dialog */}
+              <Dialog open={isEditCustomerOpen} onOpenChange={setIsEditCustomerOpen}>
+                <DialogContent className="sm:max-w-[500px]">
+                  <DialogHeader>
+                    <DialogTitle>Kunde bearbeiten</DialogTitle>
+                    <DialogDescription>
+                      Ändern Sie die Daten des bestehenden Kunden
+                    </DialogDescription>
+                  </DialogHeader>
+                  {editingCustomer && (
+                    <div className="grid gap-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Unternehmen</Label>
+                          <Input 
+                            value={editingCustomer.companyName}
+                            onChange={(e) => setEditingCustomer({
+                              ...editingCustomer,
+                              companyName: e.target.value
+                            })}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Ansprechpartner</Label>
+                          <Input 
+                            value={editingCustomer.contactPerson}
+                            onChange={(e) => setEditingCustomer({
+                              ...editingCustomer,
+                              contactPerson: e.target.value
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Preismodell</Label>
+                        <Select
+                          value={editingCustomer.pricingModel}
+                          onValueChange={(value) => setEditingCustomer({
+                            ...editingCustomer,
+                            pricingModel: value
+                          })}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Preismodell wählen" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {pricingModels.map((model) => (
+                              <SelectItem key={model.id} value={model.id}>
+                                {model.name} ({formatCurrency(model.monthlyPrice)}/Monat)
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Von (Startmonat)</Label>
+                          <Select
+                            value={String(editingCustomer.startMonth)}
+                            onValueChange={(value) => setEditingCustomer({
+                              ...editingCustomer,
+                              startMonth: parseInt(value)
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Monat wählen" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {months.map((month, index) => (
+                                <SelectItem key={index} value={String(index)}>
+                                  {month}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Bis (Endmonat)</Label>
+                          <Select
+                            value={String(editingCustomer.endMonth)}
+                            onValueChange={(value) => setEditingCustomer({
+                              ...editingCustomer,
+                              endMonth: parseInt(value)
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Monat wählen" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {months.map((month, index) => (
+                                <SelectItem 
+                                  key={index} 
+                                  value={String(index)}
+                                  disabled={index < editingCustomer.startMonth}
+                                >
+                                  {month}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-2">
+                          <Label>Vertragsart</Label>
+                          <Select
+                            value={editingCustomer.contractType}
+                            onValueChange={(value: 'monthly' | 'yearly') => setEditingCustomer({
+                              ...editingCustomer,
+                              contractType: value
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Vertragsart" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="monthly">Monatlich</SelectItem>
+                              <SelectItem value="yearly">Jährlich (2 Monate gratis)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Status</Label>
+                          <Select
+                            value={editingCustomer.status}
+                            onValueChange={(value: 'active' | 'churned' | 'paused') => setEditingCustomer({
+                              ...editingCustomer,
+                              status: value
+                            })}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Status wählen" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="active">Aktiv</SelectItem>
+                              <SelectItem value="paused">Pausiert</SelectItem>
+                              <SelectItem value="churned">Gekündigt</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => {
+                      setIsEditCustomerOpen(false);
+                      setEditingCustomer(null);
+                    }}>
+                      Abbrechen
+                    </Button>
+                    <Button onClick={handleSaveEditCustomer}>
+                      Änderungen speichern
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Delete Customer Confirmation Dialog */}
+              <Dialog open={isDeleteCustomerOpen} onOpenChange={setIsDeleteCustomerOpen}>
+                <DialogContent className="sm:max-w-[400px]">
+                  <DialogHeader>
+                    <DialogTitle>Kunde löschen</DialogTitle>
+                    <DialogDescription>
+                      Möchten Sie diesen Kunden wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {deletingCustomer && (
+                    <div className="py-4">
+                      <div className="flex items-center gap-3 p-3 bg-muted rounded-lg">
+                        <Building2 className="h-8 w-8 text-muted-foreground" />
+                        <div>
+                          <div className="font-medium">{deletingCustomer.companyName}</div>
+                          <div className="text-sm text-muted-foreground">{deletingCustomer.contactPerson}</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => {
+                      setIsDeleteCustomerOpen(false);
+                      setDeletingCustomer(null);
+                    }}>
+                      Abbrechen
+                    </Button>
+                    <Button variant="destructive" onClick={handleConfirmDeleteCustomer}>
+                      Kunde löschen
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Revenue Planning Dialog */}
+              <Dialog open={isRevenuePlanningOpen} onOpenChange={setIsRevenuePlanningOpen}>
+                <DialogContent className="sm:max-w-[900px] max-h-[90vh] overflow-y-auto">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Calendar className="h-5 w-5" />
+                      Umsatzplanung: {planningCustomer?.companyName}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Planen Sie Preismodelle und Umsätze pro Monat. Änderungen werden erst beim Speichern übernommen.
+                    </DialogDescription>
+                  </DialogHeader>
+                  {planningCustomer && (
+                    <div className="space-y-6 py-4">
+                      {/* Zeitraum-Auswahl */}
+                      <div className="p-4 bg-muted/50 rounded-lg">
+                        <Label className="text-sm font-medium mb-3 block">Aktiver Zeitraum</Label>
+                        <div className="grid grid-cols-2 gap-4">
+                          <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground">Von</Label>
+                            <Select
+                              value={String(planningCustomer.startMonth)}
+                              onValueChange={(value) => handleUpdatePlanningPeriod(parseInt(value), planningCustomer.endMonth)}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {months.map((month, index) => (
+                                  <SelectItem key={index} value={String(index)}>
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div className="space-y-2">
+                            <Label className="text-xs text-muted-foreground">Bis</Label>
+                            <Select
+                              value={String(planningCustomer.endMonth)}
+                              onValueChange={(value) => handleUpdatePlanningPeriod(planningCustomer.startMonth, parseInt(value))}
+                            >
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {months.map((month, index) => (
+                                  <SelectItem 
+                                    key={index} 
+                                    value={String(index)}
+                                    disabled={index < planningCustomer.startMonth}
+                                  >
+                                    {month}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Monatliche Planung */}
+                      <div>
+                        <Label className="text-sm font-medium mb-3 block">Monatliche Umsätze</Label>
+                        <div className="rounded-md border overflow-hidden">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="w-[100px]">Monat</TableHead>
+                                <TableHead>Preismodell</TableHead>
+                                <TableHead className="w-[150px]">Manueller Betrag</TableHead>
+                                <TableHead className="text-right w-[120px]">Umsatz</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {months.map((month, monthIndex) => {
+                                const isActive = monthIndex >= planningCustomer.startMonth && monthIndex <= planningCustomer.endMonth;
+                                const override = planningCustomer.monthlyRevenues?.[monthIndex];
+                                const currentModel = override?.pricingModel || planningCustomer.pricingModel;
+                                const customAmount = override?.customAmount;
+                                const revenue = isActive ? getCustomerMonthlyRevenue(planningCustomer, monthIndex) : 0;
+
+                                return (
+                                  <TableRow key={monthIndex} className={!isActive ? 'opacity-40 bg-muted/30' : ''}>
+                                    <TableCell className="font-medium">
+                                      {month.substring(0, 3)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {isActive ? (
+                                        <Select
+                                          value={currentModel}
+                                          onValueChange={(value) => handleUpdateMonthlyRevenue(monthIndex, value, customAmount)}
+                                        >
+                                          <SelectTrigger className="h-8">
+                                            <SelectValue />
+                                          </SelectTrigger>
+                                          <SelectContent>
+                                            {pricingModels.map((model) => (
+                                              <SelectItem key={model.id} value={model.id}>
+                                                {model.name}
+                                              </SelectItem>
+                                            ))}
+                                          </SelectContent>
+                                        </Select>
+                                      ) : (
+                                        <span className="text-muted-foreground">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {isActive ? (
+                                        <Input
+                                          type="number"
+                                          className="h-8"
+                                          placeholder="Auto"
+                                          value={customAmount !== undefined ? customAmount : ''}
+                                          onChange={(e) => {
+                                            const value = e.target.value;
+                                            if (value === '') {
+                                              handleUpdateMonthlyRevenue(monthIndex, currentModel, undefined);
+                                            } else {
+                                              handleUpdateMonthlyRevenue(monthIndex, currentModel, parseFloat(value));
+                                            }
+                                          }}
+                                        />
+                                      ) : (
+                                        <span className="text-muted-foreground">-</span>
+                                      )}
+                                    </TableCell>
+                                    <TableCell className="text-right font-medium">
+                                      {isActive ? (
+                                        <span className={customAmount !== undefined ? 'text-blue-600' : 'text-green-600'}>
+                                          {formatCurrency(revenue)}
+                                        </span>
+                                      ) : (
+                                        <span className="text-muted-foreground">-</span>
+                                      )}
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                              <TableRow className="bg-muted/50 font-medium">
+                                <TableCell colSpan={3}>Jahresumsatz gesamt</TableCell>
+                                <TableCell className="text-right text-green-600">
+                                  {formatCurrency(
+                                    months.reduce((sum, _, idx) => sum + getCustomerMonthlyRevenue(planningCustomer, idx), 0)
+                                  )}
+                                </TableCell>
+                              </TableRow>
+                            </TableBody>
+                          </Table>
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          💡 Tipp: Lassen Sie &quot;Manueller Betrag&quot; leer, um den Preis automatisch aus dem Preismodell zu berechnen.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => {
+                      setIsRevenuePlanningOpen(false);
+                      setPlanningCustomer(null);
+                    }}>
+                      Abbrechen
+                    </Button>
+                    <Button onClick={handleSaveRevenuePlanning}>
+                      Planung speichern
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
             </CardContent>
           </Card>
         </TabsContent>

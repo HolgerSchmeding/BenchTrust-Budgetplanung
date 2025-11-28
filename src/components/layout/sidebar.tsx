@@ -48,7 +48,7 @@ const navItems: NavItem[] = [
     icon: Users,
   },
   {
-    title: 'Budgetplanung & GuV',
+    title: 'Kostenplanung',
     href: '/budgetplanung',
     icon: Calculator,
   },
