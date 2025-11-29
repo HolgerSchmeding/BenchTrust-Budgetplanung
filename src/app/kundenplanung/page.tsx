@@ -6,6 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
 import {
   Table,
   TableBody,
@@ -198,6 +199,22 @@ export default function KundenplanungPage() {
   const [selectedFreemiumCustomer, setSelectedFreemiumCustomer] = useState<Customer | null>(null);
   const [isFreemiumDetailOpen, setIsFreemiumDetailOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  
+  // Konvertierungs-Dialoge
+  const [isConvertToProspectOpen, setIsConvertToProspectOpen] = useState(false);
+  const [isConvertToSignedOpen, setIsConvertToSignedOpen] = useState(false);
+  const [convertingCustomer, setConvertingCustomer] = useState<Customer | null>(null);
+  const [convertFormData, setConvertFormData] = useState({
+    pricingModel: 'showcase',
+    addOns: [] as string[],
+    contractType: 'monthly' as 'monthly' | 'yearly',
+    startMonth: new Date().getMonth(),
+    endMonth: 11,
+    conversionProbability: 50,
+    contactPerson: '',
+    notes: '',
+  });
+  
   const [newProspect, setNewProspect] = useState<Partial<Prospect>>({
     count: 1,
     pricingModel: 'showcase',
@@ -210,13 +227,17 @@ export default function KundenplanungPage() {
 
   // Kunden aus unserer lokalen Firebase-Datenbank (mit Provider-Sync-Schutz)
   const { 
-    freemiumCustomers, 
+    freemiumCustomers,
+    prospectCustomers: dbProspectCustomers,
+    signedCustomers: dbSignedCustomers,
     loading: customersLoading, 
     error: customersError,
     syncing,
     lastSyncCount,
     syncProviders,
-    changeCustomerStatus
+    changeCustomerStatus,
+    updateCustomer,
+    customers: allDbCustomers
   } = useCustomers();
 
   // Gefilterte Freemium-Kunden basierend auf Suche
@@ -428,23 +449,78 @@ export default function KundenplanungPage() {
     }
   };
 
-  // Freemium zu Prospect konvertieren
-  const handleConvertToProspect = async (customer: Customer) => {
+  // Dialog für "Zu Prospect machen" öffnen
+  const handleOpenConvertToProspect = (customer: Customer) => {
+    setConvertingCustomer(customer);
+    setConvertFormData({
+      pricingModel: 'showcase',
+      addOns: [],
+      contractType: 'monthly',
+      startMonth: new Date().getMonth(),
+      endMonth: 11,
+      conversionProbability: 50,
+      contactPerson: customer.ceo?.name || customer.salesContact?.name || '',
+      notes: '',
+    });
+    setIsFreemiumDetailOpen(false);
+    setIsConvertToProspectOpen(true);
+  };
+
+  // Prospect-Konvertierung bestätigen
+  const handleConfirmConvertToProspect = async () => {
+    if (!convertingCustomer) return;
     try {
-      await changeCustomerStatus(customer.id, 'prospect');
-      setIsFreemiumDetailOpen(false);
-      setSelectedFreemiumCustomer(null);
+      await updateCustomer(convertingCustomer.id, {
+        status: 'prospect',
+        pricingModel: convertFormData.pricingModel,
+        addOns: convertFormData.addOns,
+        contractType: convertFormData.contractType,
+        startMonth: convertFormData.startMonth,
+        conversionProbability: convertFormData.conversionProbability,
+        contactPerson: convertFormData.contactPerson,
+        notes: convertFormData.notes,
+      });
+      setIsConvertToProspectOpen(false);
+      setConvertingCustomer(null);
     } catch (err) {
       console.error('Error converting to prospect:', err);
     }
   };
 
-  // Freemium/Prospect zu Signed konvertieren  
-  const handleConvertToSigned = async (customer: Customer) => {
+  // Dialog für "Als Signed Customer" öffnen
+  const handleOpenConvertToSigned = (customer: Customer) => {
+    setConvertingCustomer(customer);
+    setConvertFormData({
+      pricingModel: customer.pricingModel || 'showcase',
+      addOns: customer.addOns || [],
+      contractType: (customer.contractType as 'monthly' | 'yearly') || 'monthly',
+      startMonth: customer.startMonth ?? new Date().getMonth(),
+      endMonth: customer.endMonth ?? 11,
+      conversionProbability: 100,
+      contactPerson: customer.contactPerson || customer.ceo?.name || customer.salesContact?.name || '',
+      notes: customer.notes || '',
+    });
+    setIsFreemiumDetailOpen(false);
+    setIsConvertToSignedOpen(true);
+  };
+
+  // Signed-Konvertierung bestätigen
+  const handleConfirmConvertToSigned = async () => {
+    if (!convertingCustomer) return;
     try {
-      await changeCustomerStatus(customer.id, 'signed');
-      setIsFreemiumDetailOpen(false);
-      setSelectedFreemiumCustomer(null);
+      await updateCustomer(convertingCustomer.id, {
+        status: 'signed',
+        pricingModel: convertFormData.pricingModel,
+        addOns: convertFormData.addOns,
+        contractType: convertFormData.contractType,
+        startMonth: convertFormData.startMonth,
+        endMonth: convertFormData.endMonth,
+        contactPerson: convertFormData.contactPerson,
+        notes: convertFormData.notes,
+        signedDate: new Date().toISOString().split('T')[0],
+      });
+      setIsConvertToSignedOpen(false);
+      setConvertingCustomer(null);
     } catch (err) {
       console.error('Error converting to signed:', err);
     }
@@ -939,14 +1015,14 @@ export default function KundenplanungPage() {
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => selectedFreemiumCustomer && handleConvertToProspect(selectedFreemiumCustomer)}
+                            onClick={() => selectedFreemiumCustomer && handleOpenConvertToProspect(selectedFreemiumCustomer)}
                           >
                             <UserPlus className="h-4 w-4 mr-1" />
                             Zu Prospect machen
                           </Button>
                           <Button 
                             size="sm"
-                            onClick={() => selectedFreemiumCustomer && handleConvertToSigned(selectedFreemiumCustomer)}
+                            onClick={() => selectedFreemiumCustomer && handleOpenConvertToSigned(selectedFreemiumCustomer)}
                           >
                             <FileCheck className="h-4 w-4 mr-1" />
                             Als Signed Customer
@@ -961,6 +1037,320 @@ export default function KundenplanungPage() {
                   <DialogFooter>
                     <Button variant="outline" onClick={() => setIsFreemiumDetailOpen(false)}>
                       Schließen
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Dialog: Convert to Prospect */}
+              <Dialog open={isConvertToProspectOpen} onOpenChange={setIsConvertToProspectOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Zu Prospect konvertieren</DialogTitle>
+                    <DialogDescription>
+                      {convertingCustomer?.companyName} als Prospect anlegen - Welches Paket möchten Sie anbieten?
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    {/* Preismodell */}
+                    <div className="space-y-2">
+                      <Label>Angebotenes Preismodell *</Label>
+                      <Select 
+                        value={convertFormData.pricingModel} 
+                        onValueChange={(value) => setConvertFormData(prev => ({ ...prev, pricingModel: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pricingModels.map(pm => (
+                            <SelectItem key={pm.id} value={pm.id}>
+                              {pm.name} - {pm.monthlyPrice === 0 ? 'Kostenlos' : `€${pm.monthlyPrice}/Monat`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Add-ons */}
+                    <div className="space-y-2">
+                      <Label>Angebotene Add-ons</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {addOns.map(addon => (
+                          <Button
+                            key={addon.id}
+                            type="button"
+                            variant={convertFormData.addOns.includes(addon.id) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              setConvertFormData(prev => ({
+                                ...prev,
+                                addOns: prev.addOns.includes(addon.id)
+                                  ? prev.addOns.filter(a => a !== addon.id)
+                                  : [...prev.addOns, addon.id]
+                              }));
+                            }}
+                          >
+                            {addon.name} (+€{addon.monthlyPrice}/M)
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Vertragsart */}
+                    <div className="space-y-2">
+                      <Label>Vertragsart</Label>
+                      <Select 
+                        value={convertFormData.contractType} 
+                        onValueChange={(value: 'monthly' | 'yearly') => setConvertFormData(prev => ({ ...prev, contractType: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monatlich</SelectItem>
+                          <SelectItem value="yearly">Jährlich (2 Monate kostenlos)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Erwarteter Startmonat */}
+                      <div className="space-y-2">
+                        <Label>Erwarteter Startmonat</Label>
+                        <Select 
+                          value={convertFormData.startMonth.toString()} 
+                          onValueChange={(value) => setConvertFormData(prev => ({ ...prev, startMonth: parseInt(value) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {months.map((month, idx) => (
+                              <SelectItem key={idx} value={idx.toString()}>{month}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Konvertierungswahrscheinlichkeit */}
+                      <div className="space-y-2">
+                        <Label>Abschlusswahrscheinlichkeit (%)</Label>
+                        <Input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={convertFormData.conversionProbability}
+                          onChange={(e) => setConvertFormData(prev => ({ ...prev, conversionProbability: parseInt(e.target.value) || 0 }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Ansprechpartner */}
+                    <div className="space-y-2">
+                      <Label>Ansprechpartner</Label>
+                      <Input
+                        value={convertFormData.contactPerson}
+                        onChange={(e) => setConvertFormData(prev => ({ ...prev, contactPerson: e.target.value }))}
+                        placeholder="Name des Ansprechpartners"
+                      />
+                    </div>
+
+                    {/* Notizen */}
+                    <div className="space-y-2">
+                      <Label>Notizen</Label>
+                      <Textarea
+                        value={convertFormData.notes}
+                        onChange={(e) => setConvertFormData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Interne Notizen zum Prospect..."
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Preisvorschau */}
+                    <div className="bg-blue-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-blue-900 mb-2">Erwarteter Umsatz</h4>
+                      <div className="text-2xl font-bold text-blue-700">
+                        {(() => {
+                          const model = pricingModels.find(p => p.id === convertFormData.pricingModel);
+                          const addOnSum = convertFormData.addOns.reduce((sum, id) => {
+                            const addon = addOns.find(a => a.id === id);
+                            return sum + (addon?.monthlyPrice || 0);
+                          }, 0);
+                          const monthlyTotal = (model?.monthlyPrice || 0) + addOnSum;
+                          const adjustedTotal = monthlyTotal * (convertFormData.conversionProbability / 100);
+                          return `€${adjustedTotal.toFixed(2)}/Monat (gewichtet mit ${convertFormData.conversionProbability}%)`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsConvertToProspectOpen(false)}>
+                      Abbrechen
+                    </Button>
+                    <Button onClick={handleConfirmConvertToProspect}>
+                      <UserPlus className="h-4 w-4 mr-2" />
+                      Als Prospect speichern
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+
+              {/* Dialog: Convert to Signed Customer */}
+              <Dialog open={isConvertToSignedOpen} onOpenChange={setIsConvertToSignedOpen}>
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Als Signed Customer anlegen</DialogTitle>
+                    <DialogDescription>
+                      {convertingCustomer?.companyName} als zahlenden Kunden eintragen - Welches Paket wurde gekauft?
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    {/* Preismodell */}
+                    <div className="space-y-2">
+                      <Label>Gekauftes Preismodell *</Label>
+                      <Select 
+                        value={convertFormData.pricingModel} 
+                        onValueChange={(value) => setConvertFormData(prev => ({ ...prev, pricingModel: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {pricingModels.map(pm => (
+                            <SelectItem key={pm.id} value={pm.id}>
+                              {pm.name} - {pm.monthlyPrice === 0 ? 'Kostenlos' : `€${pm.monthlyPrice}/Monat`}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {/* Add-ons */}
+                    <div className="space-y-2">
+                      <Label>Gebuchte Add-ons</Label>
+                      <div className="flex flex-wrap gap-2">
+                        {addOns.map(addon => (
+                          <Button
+                            key={addon.id}
+                            type="button"
+                            variant={convertFormData.addOns.includes(addon.id) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => {
+                              setConvertFormData(prev => ({
+                                ...prev,
+                                addOns: prev.addOns.includes(addon.id)
+                                  ? prev.addOns.filter(a => a !== addon.id)
+                                  : [...prev.addOns, addon.id]
+                              }));
+                            }}
+                          >
+                            {addon.name} (+€{addon.monthlyPrice}/M)
+                          </Button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Vertragsart */}
+                    <div className="space-y-2">
+                      <Label>Vertragsart</Label>
+                      <Select 
+                        value={convertFormData.contractType} 
+                        onValueChange={(value: 'monthly' | 'yearly') => setConvertFormData(prev => ({ ...prev, contractType: value }))}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="monthly">Monatlich</SelectItem>
+                          <SelectItem value="yearly">Jährlich (2 Monate kostenlos)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      {/* Startmonat */}
+                      <div className="space-y-2">
+                        <Label>Vertragsbeginn (Monat)</Label>
+                        <Select 
+                          value={convertFormData.startMonth.toString()} 
+                          onValueChange={(value) => setConvertFormData(prev => ({ ...prev, startMonth: parseInt(value) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {months.map((month, idx) => (
+                              <SelectItem key={idx} value={idx.toString()}>{month}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Endmonat */}
+                      <div className="space-y-2">
+                        <Label>Vertragsende (Monat)</Label>
+                        <Select 
+                          value={convertFormData.endMonth.toString()} 
+                          onValueChange={(value) => setConvertFormData(prev => ({ ...prev, endMonth: parseInt(value) }))}
+                        >
+                          <SelectTrigger>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {months.map((month, idx) => (
+                              <SelectItem key={idx} value={idx.toString()}>{month}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Ansprechpartner */}
+                    <div className="space-y-2">
+                      <Label>Ansprechpartner</Label>
+                      <Input
+                        value={convertFormData.contactPerson}
+                        onChange={(e) => setConvertFormData(prev => ({ ...prev, contactPerson: e.target.value }))}
+                        placeholder="Name des Ansprechpartners"
+                      />
+                    </div>
+
+                    {/* Notizen */}
+                    <div className="space-y-2">
+                      <Label>Notizen</Label>
+                      <Textarea
+                        value={convertFormData.notes}
+                        onChange={(e) => setConvertFormData(prev => ({ ...prev, notes: e.target.value }))}
+                        placeholder="Interne Notizen zum Kunden..."
+                        rows={3}
+                      />
+                    </div>
+
+                    {/* Umsatzvorschau */}
+                    <div className="bg-green-50 p-4 rounded-lg">
+                      <h4 className="font-medium text-green-900 mb-2">Monatlicher Umsatz</h4>
+                      <div className="text-2xl font-bold text-green-700">
+                        {(() => {
+                          const model = pricingModels.find(p => p.id === convertFormData.pricingModel);
+                          const addOnSum = convertFormData.addOns.reduce((sum, id) => {
+                            const addon = addOns.find(a => a.id === id);
+                            return sum + (addon?.monthlyPrice || 0);
+                          }, 0);
+                          const monthlyTotal = (model?.monthlyPrice || 0) + addOnSum;
+                          const activeMonths = convertFormData.endMonth - convertFormData.startMonth + 1;
+                          return `€${monthlyTotal.toFixed(2)}/Monat × ${activeMonths} Monate = €${(monthlyTotal * activeMonths).toFixed(2)}`;
+                        })()}
+                      </div>
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsConvertToSignedOpen(false)}>
+                      Abbrechen
+                    </Button>
+                    <Button onClick={handleConfirmConvertToSigned} className="bg-green-600 hover:bg-green-700">
+                      <FileCheck className="h-4 w-4 mr-2" />
+                      Als Signed Customer speichern
                     </Button>
                   </DialogFooter>
                 </DialogContent>
@@ -1795,7 +2185,62 @@ export default function KundenplanungPage() {
               </div>
             </CardHeader>
             <CardContent>
-              {prospects.length === 0 ? (
+              {/* Konvertierte Prospects aus Firebase anzeigen */}
+              {dbProspectCustomers.length > 0 && (
+                <div className="mb-6">
+                  <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    Aus Freemium konvertiert ({dbProspectCustomers.length})
+                  </h4>
+                  <div className="rounded-md border">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Unternehmen</TableHead>
+                          <TableHead>Kategorie</TableHead>
+                          <TableHead>Standort</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead></TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {dbProspectCustomers.map((customer: Customer) => (
+                          <TableRow key={customer.id}>
+                            <TableCell>
+                              <div className="flex items-center gap-3">
+                                <div className="h-8 w-8 rounded bg-blue-100 flex items-center justify-center text-xs font-medium text-blue-700">
+                                  {customer.logoInitials || customer.companyName.substring(0, 2).toUpperCase()}
+                                </div>
+                                <div>
+                                  <div className="font-medium">{customer.companyName}</div>
+                                  <div className="text-xs text-muted-foreground">{customer.shortDescription}</div>
+                                </div>
+                              </div>
+                            </TableCell>
+                            <TableCell>{customer.category?.replace(/-/g, ' ') || '-'}</TableCell>
+                            <TableCell>{customer.address?.city || '-'}</TableCell>
+                            <TableCell>
+                              <Badge className="bg-blue-100 text-blue-700">Prospect</Badge>
+                            </TableCell>
+                            <TableCell>
+                              <Button
+                                size="sm"
+                                onClick={() => handleOpenConvertToSigned(customer)}
+                              >
+                                <FileCheck className="h-4 w-4 mr-1" />
+                                Als Signed
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </div>
+                </div>
+              )}
+
+              {/* Manuelle Prospects */}
+              {prospects.length === 0 && dbProspectCustomers.length === 0 ? (
                 <div className="text-center py-12">
                   <Target className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
                   <h3 className="text-lg font-medium mb-2">Noch keine Prospects</h3>
@@ -1807,7 +2252,12 @@ export default function KundenplanungPage() {
                     Ersten Prospect anlegen
                   </Button>
                 </div>
-              ) : (
+              ) : prospects.length > 0 ? (
+              <>
+              <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+                <Target className="h-4 w-4" />
+                Geplante Prospect-Gruppen ({prospects.length})
+              </h4>
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -1916,7 +2366,8 @@ export default function KundenplanungPage() {
                   </TableBody>
                 </Table>
               </div>
-              )}
+              </>
+              ) : null}
             </CardContent>
           </Card>
         </TabsContent>
