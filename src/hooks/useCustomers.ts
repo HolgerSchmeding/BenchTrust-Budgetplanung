@@ -16,10 +16,31 @@ import {
 } from 'firebase/firestore';
 import { getClientDb } from '@/lib/firebase';
 import { Customer, CustomerStatus } from '@/types/customer';
-import { FirestoreProvider, providerToCustomer } from '@/types/provider';
+import { FirestoreProvider } from '@/types/provider';
 
 // Collection name für unsere Kunden
 const CUSTOMERS_COLLECTION = 'budget_customers';
+
+/**
+ * Entfernt alle undefined Werte aus einem Objekt (rekursiv)
+ * Firestore akzeptiert keine undefined Werte
+ */
+function removeUndefined<T extends Record<string, unknown>>(obj: T): Partial<T> {
+  const result: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== undefined) {
+      if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Timestamp)) {
+        const cleaned = removeUndefined(value as Record<string, unknown>);
+        if (Object.keys(cleaned).length > 0) {
+          result[key] = cleaned;
+        }
+      } else {
+        result[key] = value;
+      }
+    }
+  }
+  return result as Partial<T>;
+}
 
 /**
  * Hook für die Kundenverwaltung mit Provider-Sync
@@ -181,7 +202,9 @@ export function useCustomers() {
             syncedAt: now,
           };
 
-          batch.set(customerRef, newCustomer);
+          // Entferne undefined Werte bevor wir an Firestore senden
+          const cleanedCustomer = removeUndefined(newCustomer as Record<string, unknown>);
+          batch.set(customerRef, cleanedCustomer);
           newCount++;
         }
       }
