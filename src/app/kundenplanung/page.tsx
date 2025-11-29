@@ -107,123 +107,9 @@ interface Prospect {
   notes: string;
 }
 
-// Demo-Daten: Signed Customers
-const initialSignedCustomers: SignedCustomer[] = [
-  {
-    id: 'c1',
-    companyName: 'SAP Deutschland SE',
-    contactPerson: 'Thomas Müller',
-    pricingModel: 'lead-engine',
-    addOns: ['dynamic-placement'],
-    startMonth: 0,
-    endMonth: 11,
-    contractType: 'yearly',
-    status: 'active',
-    signedDate: '2024-11-15',
-  },
-  {
-    id: 'c2',
-    companyName: 'Personio GmbH',
-    contactPerson: 'Anna Schmidt',
-    pricingModel: 'lead-engine',
-    addOns: [],
-    startMonth: 0,
-    endMonth: 11,
-    contractType: 'yearly',
-    status: 'active',
-    signedDate: '2024-12-01',
-  },
-  {
-    id: 'c3',
-    companyName: 'Workday Inc.',
-    contactPerson: 'Michael Brown',
-    pricingModel: 'showcase-api',
-    addOns: ['featured-deal'],
-    startMonth: 1,
-    endMonth: 11,
-    contractType: 'monthly',
-    status: 'active',
-    signedDate: '2025-01-10',
-  },
-  {
-    id: 'c4',
-    companyName: 'Haufe Group',
-    contactPerson: 'Julia Weber',
-    pricingModel: 'showcase',
-    addOns: [],
-    startMonth: 2,
-    endMonth: 11,
-    contractType: 'yearly',
-    status: 'active',
-    signedDate: '2025-02-01',
-  },
-  {
-    id: 'c5',
-    companyName: 'DATEV eG',
-    contactPerson: 'Klaus Fischer',
-    pricingModel: 'lead-engine',
-    addOns: ['dynamic-placement', 'featured-deal'],
-    startMonth: 0,
-    endMonth: 11,
-    contractType: 'yearly',
-    status: 'active',
-    signedDate: '2024-10-20',
-  },
-];
-
-// Demo-Daten: Prospects
-const initialProspects: Prospect[] = [
-  {
-    id: 'p1',
-    count: 5,
-    pricingModel: 'showcase',
-    addOns: [],
-    expectedStartMonth: 3,
-    contractType: 'monthly',
-    conversionProbability: 70,
-    notes: 'Messeakquise CeBIT',
-  },
-  {
-    id: 'p2',
-    count: 3,
-    pricingModel: 'showcase-api',
-    addOns: ['dynamic-placement'],
-    expectedStartMonth: 4,
-    contractType: 'yearly',
-    conversionProbability: 50,
-    notes: 'Outbound-Kampagne HR-Tech',
-  },
-  {
-    id: 'p3',
-    count: 2,
-    pricingModel: 'lead-engine',
-    addOns: [],
-    expectedStartMonth: 5,
-    contractType: 'yearly',
-    conversionProbability: 40,
-    notes: 'Enterprise-Pipeline',
-  },
-  {
-    id: 'p4',
-    count: 10,
-    pricingModel: 'showcase',
-    addOns: [],
-    expectedStartMonth: 6,
-    contractType: 'monthly',
-    conversionProbability: 60,
-    notes: 'Inbound Marketing Q2',
-  },
-  {
-    id: 'p5',
-    count: 1,
-    pricingModel: 'lead-engine',
-    addOns: ['dynamic-placement', 'featured-deal'],
-    expectedStartMonth: 7,
-    contractType: 'yearly',
-    conversionProbability: 30,
-    notes: 'Strategic Account',
-  },
-];
+// Leere initiale Daten - echte Daten kommen aus Firebase oder werden manuell angelegt
+const initialSignedCustomers: SignedCustomer[] = [];
+const initialProspects: Prospect[] = [];
 
 function formatCurrency(amount: number): string {
   return new Intl.NumberFormat('de-DE', {
@@ -491,10 +377,17 @@ export default function KundenplanungPage() {
   };
 
   const handleSaveEditCustomer = () => {
-    if (editingCustomer) {
-      setSignedCustomers(signedCustomers.map(c => 
-        c.id === editingCustomer.id ? editingCustomer : c
-      ));
+    if (editingCustomer && editingCustomer.companyName) {
+      const existingIndex = signedCustomers.findIndex(c => c.id === editingCustomer.id);
+      if (existingIndex >= 0) {
+        // Update existing customer
+        setSignedCustomers(signedCustomers.map(c => 
+          c.id === editingCustomer.id ? editingCustomer : c
+        ));
+      } else {
+        // Add new customer
+        setSignedCustomers([...signedCustomers, editingCustomer]);
+      }
       setIsEditCustomerOpen(false);
       setEditingCustomer(null);
     }
@@ -959,15 +852,62 @@ export default function KundenplanungPage() {
                 <div>
                   <CardTitle>Signed Customers</CardTitle>
                   <CardDescription>
-                    Aktive Kundenverträge aus der Buchhaltung
+                    Zahlende Kunden mit aktivem Vertrag
                   </CardDescription>
                 </div>
-                <Badge variant="outline" className="text-green-600 border-green-600">
-                  {totalSignedCustomers} aktive Kunden
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-green-600 border-green-600">
+                    {totalSignedCustomers} aktive Kunden
+                  </Badge>
+                  <Button onClick={() => {
+                    setEditingCustomer({
+                      id: `c${Date.now()}`,
+                      companyName: '',
+                      contactPerson: '',
+                      pricingModel: 'showcase',
+                      addOns: [],
+                      startMonth: new Date().getMonth(),
+                      endMonth: 11,
+                      contractType: 'monthly',
+                      status: 'active',
+                      signedDate: new Date().toISOString().split('T')[0],
+                    });
+                    setIsEditCustomerOpen(true);
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Neuer Kunde
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
+              {signedCustomers.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileCheck className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Noch keine Signed Customers</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Legen Sie Ihren ersten zahlenden Kunden an oder wandeln Sie einen Provider/Prospect um.
+                  </p>
+                  <Button onClick={() => {
+                    setEditingCustomer({
+                      id: `c${Date.now()}`,
+                      companyName: '',
+                      contactPerson: '',
+                      pricingModel: 'showcase',
+                      addOns: [],
+                      startMonth: new Date().getMonth(),
+                      endMonth: 11,
+                      contractType: 'monthly',
+                      status: 'active',
+                      signedDate: new Date().toISOString().split('T')[0],
+                    });
+                    setIsEditCustomerOpen(true);
+                  }}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ersten Kunden anlegen
+                  </Button>
+                </div>
+              ) : (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -1094,14 +1034,17 @@ export default function KundenplanungPage() {
                   </TableBody>
                 </Table>
               </div>
+              )}
 
               {/* Edit Customer Dialog */}
               <Dialog open={isEditCustomerOpen} onOpenChange={setIsEditCustomerOpen}>
                 <DialogContent className="sm:max-w-[500px]">
                   <DialogHeader>
-                    <DialogTitle>Kunde bearbeiten</DialogTitle>
+                    <DialogTitle>{editingCustomer?.id?.startsWith('c') && !signedCustomers.find(c => c.id === editingCustomer?.id) ? 'Neuen Kunden anlegen' : 'Kunde bearbeiten'}</DialogTitle>
                     <DialogDescription>
-                      Ändern Sie die Daten des bestehenden Kunden
+                      {editingCustomer?.id?.startsWith('c') && !signedCustomers.find(c => c.id === editingCustomer?.id) 
+                        ? 'Erfassen Sie die Daten des neuen Kunden'
+                        : 'Ändern Sie die Daten des bestehenden Kunden'}
                     </DialogDescription>
                   </DialogHeader>
                   {editingCustomer && (
@@ -1727,6 +1670,19 @@ export default function KundenplanungPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {prospects.length === 0 ? (
+                <div className="text-center py-12">
+                  <Target className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Noch keine Prospects</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Planen Sie potenzielle Neukunden für Ihre Umsatzprognose.
+                  </p>
+                  <Button onClick={() => setIsAddProspectOpen(true)}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Ersten Prospect anlegen
+                  </Button>
+                </div>
+              ) : (
               <div className="rounded-md border">
                 <Table>
                   <TableHeader>
@@ -1835,6 +1791,7 @@ export default function KundenplanungPage() {
                   </TableBody>
                 </Table>
               </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
