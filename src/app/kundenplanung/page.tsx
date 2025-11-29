@@ -52,10 +52,12 @@ import {
   RefreshCw,
   Loader2,
   Search,
-  X
+  X,
+  AlertCircle,
+  CheckCircle2
 } from 'lucide-react';
-import { useProviders } from '@/hooks/useProviders';
-import { ProviderAsCustomer } from '@/types/provider';
+import { useCustomers } from '@/hooks/useCustomers';
+import { Customer } from '@/types/customer';
 
 // Preismodelle (aus der Preismodelle-Seite)
 const pricingModels = [
@@ -193,8 +195,8 @@ export default function KundenplanungPage() {
   const [deletingCustomer, setDeletingCustomer] = useState<SignedCustomer | null>(null);
   const [isRevenuePlanningOpen, setIsRevenuePlanningOpen] = useState(false);
   const [planningCustomer, setPlanningCustomer] = useState<SignedCustomer | null>(null);
-  const [selectedProvider, setSelectedProvider] = useState<ProviderAsCustomer | null>(null);
-  const [isProviderDetailOpen, setIsProviderDetailOpen] = useState(false);
+  const [selectedFreemiumCustomer, setSelectedFreemiumCustomer] = useState<Customer | null>(null);
+  const [isFreemiumDetailOpen, setIsFreemiumDetailOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [newProspect, setNewProspect] = useState<Partial<Prospect>>({
     count: 1,
@@ -206,16 +208,24 @@ export default function KundenplanungPage() {
     notes: '',
   });
 
-  // Provider aus Firebase (Echtzeit-Sync)
-  const { customers: providerCustomers, loading: providersLoading, error: providersError } = useProviders();
+  // Kunden aus unserer lokalen Firebase-Datenbank (mit Provider-Sync-Schutz)
+  const { 
+    freemiumCustomers, 
+    loading: customersLoading, 
+    error: customersError,
+    syncing,
+    lastSyncCount,
+    syncProviders,
+    changeCustomerStatus
+  } = useCustomers();
 
-  // Gefilterte Provider basierend auf Suche
-  const filteredProviders = providerCustomers.filter(provider => 
+  // Gefilterte Freemium-Kunden basierend auf Suche
+  const filteredFreemium = freemiumCustomers.filter((customer: Customer) => 
     searchQuery === '' || 
-    provider.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    provider.shortDescription?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    provider.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    provider.address.city?.toLowerCase().includes(searchQuery.toLowerCase())
+    customer.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.shortDescription?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    customer.address?.city?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   // Berechnungen für Signed Customers
@@ -418,38 +428,26 @@ export default function KundenplanungPage() {
     }
   };
 
-  // Provider zu Signed Customer konvertieren
-  const handleConvertProviderToCustomer = (provider: ProviderAsCustomer) => {
-    const newCustomer: SignedCustomer = {
-      id: `c${Date.now()}`,
-      companyName: provider.companyName,
-      contactPerson: provider.ceo?.name || provider.salesContact?.name || '',
-      pricingModel: 'showcase', // Standard-Preismodell
-      addOns: [],
-      startMonth: new Date().getMonth(),
-      endMonth: 11,
-      contractType: 'monthly',
-      status: 'active',
-      signedDate: new Date().toISOString().split('T')[0],
-    };
-    setEditingCustomer(newCustomer);
-    setIsProviderDetailOpen(false);
-    setIsEditCustomerOpen(true);
+  // Freemium zu Prospect konvertieren
+  const handleConvertToProspect = async (customer: Customer) => {
+    try {
+      await changeCustomerStatus(customer.id, 'prospect');
+      setIsFreemiumDetailOpen(false);
+      setSelectedFreemiumCustomer(null);
+    } catch (err) {
+      console.error('Error converting to prospect:', err);
+    }
   };
 
-  // Provider zu Prospect konvertieren
-  const handleConvertProviderToProspect = (provider: ProviderAsCustomer) => {
-    setNewProspect({
-      count: 1,
-      pricingModel: 'showcase',
-      addOns: [],
-      expectedStartMonth: new Date().getMonth(),
-      contractType: 'monthly',
-      conversionProbability: 50,
-      notes: `Konvertiert von Provider: ${provider.companyName}`,
-    });
-    setIsProviderDetailOpen(false);
-    setIsAddProspectOpen(true);
+  // Freemium/Prospect zu Signed konvertieren  
+  const handleConvertToSigned = async (customer: Customer) => {
+    try {
+      await changeCustomerStatus(customer.id, 'signed');
+      setIsFreemiumDetailOpen(false);
+      setSelectedFreemiumCustomer(null);
+    } catch (err) {
+      console.error('Error converting to signed:', err);
+    }
   };
 
   return (
@@ -475,7 +473,7 @@ export default function KundenplanungPage() {
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold text-gray-600">
-              {providersLoading ? '...' : providerCustomers.length}
+              {customersLoading ? '...' : freemiumCustomers.length}
             </div>
             <p className="text-xs text-muted-foreground">
               Aus BenchTrust-DB synchronisiert
@@ -580,7 +578,7 @@ export default function KundenplanungPage() {
           <TabsTrigger value="freemium" className="flex items-center gap-2">
             <Globe className="h-4 w-4" />
             Freemium (Provider)
-            {!providersLoading && <Badge variant="secondary" className="ml-1">{providerCustomers.length}</Badge>}
+            {!customersLoading && <Badge variant="secondary" className="ml-1">{freemiumCustomers.length}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="signed" className="flex items-center gap-2">
             <FileCheck className="h-4 w-4" />
@@ -607,21 +605,29 @@ export default function KundenplanungPage() {
                     Freemium-Kunden (Provider)
                   </CardTitle>
                   <CardDescription>
-                    Provider aus der BenchTrust-Datenbank - automatisch synchronisiert
+                    Provider aus der BenchTrust-Datenbank - werden bei Änderung nicht mehr überschrieben
                   </CardDescription>
                 </div>
                 <div className="flex items-center gap-2">
-                  {providersLoading ? (
-                    <Badge variant="outline" className="flex items-center gap-1">
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      Laden...
-                    </Badge>
-                  ) : (
+                  {lastSyncCount !== null && lastSyncCount > 0 && (
                     <Badge variant="outline" className="text-green-600 border-green-600">
-                      <RefreshCw className="h-3 w-3 mr-1" />
-                      Live-Sync aktiv
+                      <CheckCircle2 className="h-3 w-3 mr-1" />
+                      {lastSyncCount} neue importiert
                     </Badge>
                   )}
+                  <Button 
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => syncProviders()}
+                    disabled={syncing}
+                  >
+                    {syncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    {syncing ? 'Synchronisiere...' : 'Provider synchronisieren'}
+                  </Button>
                 </div>
               </div>
             </CardHeader>
@@ -649,33 +655,52 @@ export default function KundenplanungPage() {
                 </div>
                 {searchQuery && (
                   <p className="text-sm text-muted-foreground mt-2">
-                    {filteredProviders.length} von {providerCustomers.length} Providern gefunden
+                    {filteredFreemium.length} von {freemiumCustomers.length} Kunden gefunden
                   </p>
                 )}
               </div>
 
-              {providersError ? (
+              {customersError ? (
                 <div className="p-8 text-center">
-                  <div className="text-red-500 mb-2">Fehler beim Laden der Provider</div>
-                  <p className="text-sm text-muted-foreground">{providersError}</p>
+                  <AlertCircle className="h-12 w-12 mx-auto text-red-500 mb-4" />
+                  <div className="text-red-500 mb-2">Fehler beim Laden der Kunden</div>
+                  <p className="text-sm text-muted-foreground">{customersError}</p>
+                  <Button variant="outline" className="mt-4" onClick={() => syncProviders()}>
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    Erneut versuchen
+                  </Button>
                 </div>
-              ) : providersLoading ? (
+              ) : customersLoading ? (
                 <div className="p-8 text-center">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">Provider werden geladen...</p>
+                  <p className="text-sm text-muted-foreground">Kunden werden geladen...</p>
                 </div>
-              ) : filteredProviders.length === 0 ? (
+              ) : freemiumCustomers.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Globe className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Noch keine Freemium-Kunden</h3>
+                  <p className="text-muted-foreground mb-4">
+                    Klicken Sie auf &quot;Provider synchronisieren&quot; um Provider aus der BenchTrust-Datenbank zu importieren.
+                  </p>
+                  <Button onClick={() => syncProviders()} disabled={syncing}>
+                    {syncing ? (
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                    )}
+                    Provider synchronisieren
+                  </Button>
+                </div>
+              ) : filteredFreemium.length === 0 ? (
                 <div className="p-8 text-center">
                   <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-                  <h3 className="text-lg font-medium mb-2">Keine Provider gefunden</h3>
+                  <h3 className="text-lg font-medium mb-2">Keine Ergebnisse</h3>
                   <p className="text-muted-foreground">
-                    {searchQuery ? `Keine Ergebnisse für "${searchQuery}"` : 'Keine Provider in der Datenbank'}
+                    Keine Kunden gefunden für &quot;{searchQuery}&quot;
                   </p>
-                  {searchQuery && (
-                    <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
-                      Suche zurücksetzen
-                    </Button>
-                  )}
+                  <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
+                    Suche zurücksetzen
+                  </Button>
                 </div>
               ) : (
                 <div className="rounded-md border">
@@ -692,46 +717,46 @@ export default function KundenplanungPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {filteredProviders.map((provider) => (
-                        <TableRow key={provider.id}>
+                      {filteredFreemium.map((customer: Customer) => (
+                        <TableRow key={customer.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              {provider.logoUrl ? (
+                              {customer.logoUrl ? (
                                 <img 
-                                  src={provider.logoUrl} 
-                                  alt={provider.companyName}
+                                  src={customer.logoUrl} 
+                                  alt={customer.companyName}
                                   className="h-8 w-8 rounded object-contain bg-muted"
                                 />
                               ) : (
                                 <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-xs font-medium">
-                                  {provider.logoInitials || provider.companyName.substring(0, 2).toUpperCase()}
+                                  {customer.logoInitials || customer.companyName.substring(0, 2).toUpperCase()}
                                 </div>
                               )}
                               <div>
-                                <div className="font-medium">{provider.companyName}</div>
+                                <div className="font-medium">{customer.companyName}</div>
                                 <div className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
-                                  {provider.shortDescription}
+                                  {customer.shortDescription}
                                 </div>
                               </div>
                             </div>
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              <Badge variant={provider.domain === 'tech' ? 'default' : 'secondary'}>
-                                {provider.domain === 'tech' ? 'Tech' : 'Service'}
+                              <Badge variant={customer.domain === 'tech' ? 'default' : 'secondary'}>
+                                {customer.domain === 'tech' ? 'Tech' : 'Service'}
                               </Badge>
                               <span className="text-xs text-muted-foreground">
-                                {provider.category.replace(/-/g, ' ')}
+                                {customer.category?.replace(/-/g, ' ') || '-'}
                               </span>
                             </div>
                           </TableCell>
                           <TableCell>
-                            {provider.address.city ? (
+                            {customer.address?.city ? (
                               <div className="flex items-center gap-1 text-sm">
                                 <MapPin className="h-3 w-3 text-muted-foreground" />
-                                <span>{provider.address.city}</span>
-                                {provider.address.country && (
-                                  <span className="text-muted-foreground">, {provider.address.country}</span>
+                                <span>{customer.address.city}</span>
+                                {customer.address.country && (
+                                  <span className="text-muted-foreground">, {customer.address.country}</span>
                                 )}
                               </div>
                             ) : (
@@ -739,16 +764,16 @@ export default function KundenplanungPage() {
                             )}
                           </TableCell>
                           <TableCell>
-                            {provider.ceo?.name ? (
+                            {customer.ceo?.name ? (
                               <div>
-                                <div className="text-sm font-medium">{provider.ceo.name}</div>
-                                {provider.ceo.email && (
+                                <div className="text-sm font-medium">{customer.ceo.name}</div>
+                                {customer.ceo.email && (
                                   <a 
-                                    href={`mailto:${provider.ceo.email}`}
+                                    href={`mailto:${customer.ceo.email}`}
                                     className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                                   >
                                     <Mail className="h-3 w-3" />
-                                    {provider.ceo.email}
+                                    {customer.ceo.email}
                                   </a>
                                 )}
                               </div>
@@ -758,27 +783,27 @@ export default function KundenplanungPage() {
                           </TableCell>
                           <TableCell>
                             <div className="flex flex-col gap-1">
-                              {provider.generalContact?.email && (
+                              {customer.generalContact?.email && (
                                 <a 
-                                  href={`mailto:${provider.generalContact.email}`}
+                                  href={`mailto:${customer.generalContact.email}`}
                                   className="text-xs text-blue-600 hover:underline flex items-center gap-1"
                                 >
                                   <Mail className="h-3 w-3" />
                                   E-Mail
                                 </a>
                               )}
-                              {provider.generalContact?.phone && (
+                              {customer.generalContact?.phone && (
                                 <a 
-                                  href={`tel:${provider.generalContact.phone}`}
+                                  href={`tel:${customer.generalContact.phone}`}
                                   className="text-xs text-muted-foreground flex items-center gap-1"
                                 >
                                   <Phone className="h-3 w-3" />
-                                  {provider.generalContact.phone}
+                                  {customer.generalContact.phone}
                                 </a>
                               )}
-                              {provider.website && (
+                              {customer.website && (
                                 <a 
-                                  href={provider.website}
+                                  href={customer.website}
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   className="text-xs text-blue-600 hover:underline flex items-center gap-1"
@@ -790,17 +815,24 @@ export default function KundenplanungPage() {
                             </div>
                           </TableCell>
                           <TableCell>
-                            <Badge variant="outline" className="bg-gray-100">
-                              Freemium
-                            </Badge>
+                            <div className="flex items-center gap-1">
+                              <Badge variant="outline" className="bg-gray-100">
+                                Freemium
+                              </Badge>
+                              {customer.isModified && (
+                                <Badge variant="secondary" className="text-xs">
+                                  Bearbeitet
+                                </Badge>
+                              )}
+                            </div>
                           </TableCell>
                           <TableCell>
                             <Button
                               variant="ghost"
                               size="sm"
                               onClick={() => {
-                                setSelectedProvider(provider);
-                                setIsProviderDetailOpen(true);
+                                setSelectedFreemiumCustomer(customer);
+                                setIsFreemiumDetailOpen(true);
                               }}
                             >
                               <Edit className="h-4 w-4" />
@@ -808,134 +840,126 @@ export default function KundenplanungPage() {
                           </TableCell>
                         </TableRow>
                       ))}
-                      {filteredProviders.length === 0 && providerCustomers.length > 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            Keine Provider gefunden für &quot;{searchQuery}&quot;
-                          </TableCell>
-                        </TableRow>
-                      )}
-                      {providerCustomers.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
-                            Keine Provider in der Datenbank gefunden
-                          </TableCell>
-                        </TableRow>
-                      )}
                     </TableBody>
                   </Table>
                 </div>
               )}
 
-              {/* Provider Detail Dialog */}
-              <Dialog open={isProviderDetailOpen} onOpenChange={setIsProviderDetailOpen}>
+              {/* Freemium Customer Detail Dialog */}
+              <Dialog open={isFreemiumDetailOpen} onOpenChange={setIsFreemiumDetailOpen}>
                 <DialogContent className="sm:max-w-[600px]">
                   <DialogHeader>
                     <DialogTitle className="flex items-center gap-2">
                       <Building2 className="h-5 w-5" />
-                      {selectedProvider?.companyName}
+                      {selectedFreemiumCustomer?.companyName}
                     </DialogTitle>
                     <DialogDescription>
-                      Provider-Details aus der BenchTrust-Datenbank
+                      Kunden-Details aus der lokalen Datenbank
+                      {selectedFreemiumCustomer?.isModified && (
+                        <Badge variant="secondary" className="ml-2">Manuell bearbeitet - wird bei Sync nicht überschrieben</Badge>
+                      )}
                     </DialogDescription>
                   </DialogHeader>
-                  {selectedProvider && (
+                  {selectedFreemiumCustomer && (
                     <div className="space-y-4 py-4">
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <Label className="text-xs text-muted-foreground">Domain</Label>
-                          <div className="font-medium">{selectedProvider.domain === 'tech' ? 'Technology' : 'Service'}</div>
+                          <div className="font-medium">{selectedFreemiumCustomer.domain === 'tech' ? 'Technology' : 'Service'}</div>
                         </div>
                         <div>
                           <Label className="text-xs text-muted-foreground">Kategorie</Label>
-                          <div className="font-medium">{selectedProvider.category.replace(/-/g, ' ')}</div>
+                          <div className="font-medium">{selectedFreemiumCustomer.category?.replace(/-/g, ' ') || '-'}</div>
                         </div>
                       </div>
                       
                       <div>
                         <Label className="text-xs text-muted-foreground">Beschreibung</Label>
-                        <div className="text-sm">{selectedProvider.shortDescription}</div>
+                        <div className="text-sm">{selectedFreemiumCustomer.shortDescription || '-'}</div>
                       </div>
 
-                      {(selectedProvider.address.street || selectedProvider.address.city) && (
+                      {(selectedFreemiumCustomer.address?.street || selectedFreemiumCustomer.address?.city) && (
                         <div>
                           <Label className="text-xs text-muted-foreground">Adresse</Label>
                           <div className="text-sm">
-                            {selectedProvider.address.street && <div>{selectedProvider.address.street}</div>}
+                            {selectedFreemiumCustomer.address.street && <div>{selectedFreemiumCustomer.address.street}</div>}
                             <div>
-                              {selectedProvider.address.postalCode} {selectedProvider.address.city}
-                              {selectedProvider.address.country && `, ${selectedProvider.address.country}`}
+                              {selectedFreemiumCustomer.address.postalCode} {selectedFreemiumCustomer.address.city}
+                              {selectedFreemiumCustomer.address.country && `, ${selectedFreemiumCustomer.address.country}`}
                             </div>
                           </div>
                         </div>
                       )}
 
                       <div className="grid grid-cols-2 gap-4">
-                        {selectedProvider.ceo?.name && (
+                        {selectedFreemiumCustomer.ceo?.name && (
                           <div>
                             <Label className="text-xs text-muted-foreground">CEO / Geschäftsführer</Label>
-                            <div className="font-medium">{selectedProvider.ceo.name}</div>
-                            {selectedProvider.ceo.email && (
-                              <a href={`mailto:${selectedProvider.ceo.email}`} className="text-sm text-blue-600 hover:underline">
-                                {selectedProvider.ceo.email}
+                            <div className="font-medium">{selectedFreemiumCustomer.ceo.name}</div>
+                            {selectedFreemiumCustomer.ceo.email && (
+                              <a href={`mailto:${selectedFreemiumCustomer.ceo.email}`} className="text-sm text-blue-600 hover:underline">
+                                {selectedFreemiumCustomer.ceo.email}
                               </a>
                             )}
                           </div>
                         )}
-                        {selectedProvider.salesContact?.name && (
+                        {selectedFreemiumCustomer.salesContact?.name && (
                           <div>
                             <Label className="text-xs text-muted-foreground">Sales-Kontakt</Label>
-                            <div className="font-medium">{selectedProvider.salesContact.name}</div>
-                            {selectedProvider.salesContact.email && (
-                              <a href={`mailto:${selectedProvider.salesContact.email}`} className="text-sm text-blue-600 hover:underline">
-                                {selectedProvider.salesContact.email}
+                            <div className="font-medium">{selectedFreemiumCustomer.salesContact.name}</div>
+                            {selectedFreemiumCustomer.salesContact.email && (
+                              <a href={`mailto:${selectedFreemiumCustomer.salesContact.email}`} className="text-sm text-blue-600 hover:underline">
+                                {selectedFreemiumCustomer.salesContact.email}
                               </a>
                             )}
                           </div>
                         )}
                       </div>
 
-                      {selectedProvider.website && (
+                      {selectedFreemiumCustomer.website && (
                         <div>
                           <Label className="text-xs text-muted-foreground">Website</Label>
                           <a 
-                            href={selectedProvider.website}
+                            href={selectedFreemiumCustomer.website}
                             target="_blank"
                             rel="noopener noreferrer"
                             className="text-sm text-blue-600 hover:underline flex items-center gap-1"
                           >
-                            {selectedProvider.website}
+                            {selectedFreemiumCustomer.website}
                             <ExternalLink className="h-3 w-3" />
                           </a>
                         </div>
                       )}
 
                       <div className="pt-4 border-t">
-                        <Label className="text-xs text-muted-foreground">Kundenstatus</Label>
-                        <div className="flex items-center gap-2 mt-1">
+                        <Label className="text-xs text-muted-foreground">Kundenstatus ändern</Label>
+                        <div className="flex items-center gap-2 mt-2">
                           <Badge variant="outline" className="bg-gray-100">Freemium</Badge>
                           <span className="text-sm text-muted-foreground">→</span>
                           <Button 
                             size="sm" 
                             variant="outline"
-                            onClick={() => selectedProvider && handleConvertProviderToProspect(selectedProvider)}
+                            onClick={() => selectedFreemiumCustomer && handleConvertToProspect(selectedFreemiumCustomer)}
                           >
                             <UserPlus className="h-4 w-4 mr-1" />
                             Zu Prospect machen
                           </Button>
                           <Button 
                             size="sm"
-                            onClick={() => selectedProvider && handleConvertProviderToCustomer(selectedProvider)}
+                            onClick={() => selectedFreemiumCustomer && handleConvertToSigned(selectedFreemiumCustomer)}
                           >
                             <FileCheck className="h-4 w-4 mr-1" />
-                            Als Kunde anlegen
+                            Als Signed Customer
                           </Button>
                         </div>
+                        <p className="text-xs text-muted-foreground mt-2">
+                          Nach der Statusänderung wird dieser Kunde bei zukünftigen Synchronisierungen nicht mehr überschrieben.
+                        </p>
                       </div>
                     </div>
                   )}
                   <DialogFooter>
-                    <Button variant="outline" onClick={() => setIsProviderDetailOpen(false)}>
+                    <Button variant="outline" onClick={() => setIsFreemiumDetailOpen(false)}>
                       Schließen
                     </Button>
                   </DialogFooter>
