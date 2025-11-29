@@ -50,7 +50,9 @@ import {
   MapPin,
   ExternalLink,
   RefreshCw,
-  Loader2
+  Loader2,
+  Search,
+  X
 } from 'lucide-react';
 import { useProviders } from '@/hooks/useProviders';
 import { ProviderAsCustomer } from '@/types/provider';
@@ -193,6 +195,7 @@ export default function KundenplanungPage() {
   const [planningCustomer, setPlanningCustomer] = useState<SignedCustomer | null>(null);
   const [selectedProvider, setSelectedProvider] = useState<ProviderAsCustomer | null>(null);
   const [isProviderDetailOpen, setIsProviderDetailOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const [newProspect, setNewProspect] = useState<Partial<Prospect>>({
     count: 1,
     pricingModel: 'showcase',
@@ -205,6 +208,15 @@ export default function KundenplanungPage() {
 
   // Provider aus Firebase (Echtzeit-Sync)
   const { customers: providerCustomers, loading: providersLoading, error: providersError } = useProviders();
+
+  // Gefilterte Provider basierend auf Suche
+  const filteredProviders = providerCustomers.filter(provider => 
+    searchQuery === '' || 
+    provider.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    provider.shortDescription?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    provider.category?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    provider.address.city?.toLowerCase().includes(searchQuery.toLowerCase())
+  );
 
   // Berechnungen für Signed Customers
   const signedRevenue = signedCustomers
@@ -580,6 +592,34 @@ export default function KundenplanungPage() {
               </div>
             </CardHeader>
             <CardContent>
+              {/* Suchfeld */}
+              <div className="mb-4">
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Suche nach Kundenname, Kategorie oder Stadt..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 pr-10"
+                  />
+                  {searchQuery && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                      onClick={() => setSearchQuery('')}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                {searchQuery && (
+                  <p className="text-sm text-muted-foreground mt-2">
+                    {filteredProviders.length} von {providerCustomers.length} Providern gefunden
+                  </p>
+                )}
+              </div>
+
               {providersError ? (
                 <div className="p-8 text-center">
                   <div className="text-red-500 mb-2">Fehler beim Laden der Provider</div>
@@ -589,6 +629,19 @@ export default function KundenplanungPage() {
                 <div className="p-8 text-center">
                   <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
                   <p className="text-sm text-muted-foreground">Provider werden geladen...</p>
+                </div>
+              ) : filteredProviders.length === 0 ? (
+                <div className="p-8 text-center">
+                  <Search className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Keine Provider gefunden</h3>
+                  <p className="text-muted-foreground">
+                    {searchQuery ? `Keine Ergebnisse für "${searchQuery}"` : 'Keine Provider in der Datenbank'}
+                  </p>
+                  {searchQuery && (
+                    <Button variant="outline" className="mt-4" onClick={() => setSearchQuery('')}>
+                      Suche zurücksetzen
+                    </Button>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-md border">
@@ -605,7 +658,7 @@ export default function KundenplanungPage() {
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {providerCustomers.map((provider) => (
+                      {filteredProviders.map((provider) => (
                         <TableRow key={provider.id}>
                           <TableCell>
                             <div className="flex items-center gap-3">
@@ -721,6 +774,13 @@ export default function KundenplanungPage() {
                           </TableCell>
                         </TableRow>
                       ))}
+                      {filteredProviders.length === 0 && providerCustomers.length > 0 && (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            Keine Provider gefunden für &quot;{searchQuery}&quot;
+                          </TableCell>
+                        </TableRow>
+                      )}
                       {providerCustomers.length === 0 && (
                         <TableRow>
                           <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
