@@ -43,8 +43,17 @@ import {
   Euro,
   Building2,
   FileCheck,
-  Clock
+  Clock,
+  Globe,
+  Mail,
+  Phone,
+  MapPin,
+  ExternalLink,
+  RefreshCw,
+  Loader2
 } from 'lucide-react';
+import { useProviders } from '@/hooks/useProviders';
+import { ProviderAsCustomer } from '@/types/provider';
 
 // Preismodelle (aus der Preismodelle-Seite)
 const pricingModels = [
@@ -296,6 +305,8 @@ export default function KundenplanungPage() {
   const [deletingCustomer, setDeletingCustomer] = useState<SignedCustomer | null>(null);
   const [isRevenuePlanningOpen, setIsRevenuePlanningOpen] = useState(false);
   const [planningCustomer, setPlanningCustomer] = useState<SignedCustomer | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<ProviderAsCustomer | null>(null);
+  const [isProviderDetailOpen, setIsProviderDetailOpen] = useState(false);
   const [newProspect, setNewProspect] = useState<Partial<Prospect>>({
     count: 1,
     pricingModel: 'showcase',
@@ -305,6 +316,9 @@ export default function KundenplanungPage() {
     conversionProbability: 50,
     notes: '',
   });
+
+  // Provider aus Firebase (Echtzeit-Sync)
+  const { customers: providerCustomers, loading: providersLoading, error: providersError } = useProviders();
 
   // Berechnungen für Signed Customers
   const signedRevenue = signedCustomers
@@ -512,7 +526,24 @@ export default function KundenplanungPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
+              <Globe className="h-4 w-4" />
+              Freemium (Provider)
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-gray-600">
+              {providersLoading ? '...' : providerCustomers.length}
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Aus BenchTrust-DB synchronisiert
+            </p>
+          </CardContent>
+        </Card>
+
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground flex items-center gap-2">
@@ -605,8 +636,13 @@ export default function KundenplanungPage() {
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="signed" className="space-y-4">
+      <Tabs defaultValue="freemium" className="space-y-4">
         <TabsList>
+          <TabsTrigger value="freemium" className="flex items-center gap-2">
+            <Globe className="h-4 w-4" />
+            Freemium (Provider)
+            {!providersLoading && <Badge variant="secondary" className="ml-1">{providerCustomers.length}</Badge>}
+          </TabsTrigger>
           <TabsTrigger value="signed" className="flex items-center gap-2">
             <FileCheck className="h-4 w-4" />
             Signed Customers
@@ -620,6 +656,300 @@ export default function KundenplanungPage() {
             Monatsübersicht
           </TabsTrigger>
         </TabsList>
+
+        {/* Freemium (Provider) Tab */}
+        <TabsContent value="freemium">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    <Globe className="h-5 w-5" />
+                    Freemium-Kunden (Provider)
+                  </CardTitle>
+                  <CardDescription>
+                    Provider aus der BenchTrust-Datenbank - automatisch synchronisiert
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  {providersLoading ? (
+                    <Badge variant="outline" className="flex items-center gap-1">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Laden...
+                    </Badge>
+                  ) : (
+                    <Badge variant="outline" className="text-green-600 border-green-600">
+                      <RefreshCw className="h-3 w-3 mr-1" />
+                      Live-Sync aktiv
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {providersError ? (
+                <div className="p-8 text-center">
+                  <div className="text-red-500 mb-2">Fehler beim Laden der Provider</div>
+                  <p className="text-sm text-muted-foreground">{providersError}</p>
+                </div>
+              ) : providersLoading ? (
+                <div className="p-8 text-center">
+                  <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">Provider werden geladen...</p>
+                </div>
+              ) : (
+                <div className="rounded-md border">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Unternehmen</TableHead>
+                        <TableHead>Kategorie</TableHead>
+                        <TableHead>Standort</TableHead>
+                        <TableHead>CEO / Geschäftsführer</TableHead>
+                        <TableHead>Kontakt</TableHead>
+                        <TableHead>Status</TableHead>
+                        <TableHead></TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {providerCustomers.map((provider) => (
+                        <TableRow key={provider.id}>
+                          <TableCell>
+                            <div className="flex items-center gap-3">
+                              {provider.logoUrl ? (
+                                <img 
+                                  src={provider.logoUrl} 
+                                  alt={provider.companyName}
+                                  className="h-8 w-8 rounded object-contain bg-muted"
+                                />
+                              ) : (
+                                <div className="h-8 w-8 rounded bg-primary/10 flex items-center justify-center text-xs font-medium">
+                                  {provider.logoInitials || provider.companyName.substring(0, 2).toUpperCase()}
+                                </div>
+                              )}
+                              <div>
+                                <div className="font-medium">{provider.companyName}</div>
+                                <div className="text-xs text-muted-foreground line-clamp-1 max-w-[200px]">
+                                  {provider.shortDescription}
+                                </div>
+                              </div>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              <Badge variant={provider.domain === 'tech' ? 'default' : 'secondary'}>
+                                {provider.domain === 'tech' ? 'Tech' : 'Service'}
+                              </Badge>
+                              <span className="text-xs text-muted-foreground">
+                                {provider.category.replace(/-/g, ' ')}
+                              </span>
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            {provider.address.city ? (
+                              <div className="flex items-center gap-1 text-sm">
+                                <MapPin className="h-3 w-3 text-muted-foreground" />
+                                <span>{provider.address.city}</span>
+                                {provider.address.country && (
+                                  <span className="text-muted-foreground">, {provider.address.country}</span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {provider.ceo?.name ? (
+                              <div>
+                                <div className="text-sm font-medium">{provider.ceo.name}</div>
+                                {provider.ceo.email && (
+                                  <a 
+                                    href={`mailto:${provider.ceo.email}`}
+                                    className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                  >
+                                    <Mail className="h-3 w-3" />
+                                    {provider.ceo.email}
+                                  </a>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-muted-foreground text-sm">-</span>
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <div className="flex flex-col gap-1">
+                              {provider.generalContact?.email && (
+                                <a 
+                                  href={`mailto:${provider.generalContact.email}`}
+                                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                >
+                                  <Mail className="h-3 w-3" />
+                                  E-Mail
+                                </a>
+                              )}
+                              {provider.generalContact?.phone && (
+                                <a 
+                                  href={`tel:${provider.generalContact.phone}`}
+                                  className="text-xs text-muted-foreground flex items-center gap-1"
+                                >
+                                  <Phone className="h-3 w-3" />
+                                  {provider.generalContact.phone}
+                                </a>
+                              )}
+                              {provider.website && (
+                                <a 
+                                  href={provider.website}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-blue-600 hover:underline flex items-center gap-1"
+                                >
+                                  <ExternalLink className="h-3 w-3" />
+                                  Website
+                                </a>
+                              )}
+                            </div>
+                          </TableCell>
+                          <TableCell>
+                            <Badge variant="outline" className="bg-gray-100">
+                              Freemium
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                setSelectedProvider(provider);
+                                setIsProviderDetailOpen(true);
+                              }}
+                            >
+                              <Edit className="h-4 w-4" />
+                            </Button>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                      {providerCustomers.length === 0 && (
+                        <TableRow>
+                          <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                            Keine Provider in der Datenbank gefunden
+                          </TableCell>
+                        </TableRow>
+                      )}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+
+              {/* Provider Detail Dialog */}
+              <Dialog open={isProviderDetailOpen} onOpenChange={setIsProviderDetailOpen}>
+                <DialogContent className="sm:max-w-[600px]">
+                  <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                      <Building2 className="h-5 w-5" />
+                      {selectedProvider?.companyName}
+                    </DialogTitle>
+                    <DialogDescription>
+                      Provider-Details aus der BenchTrust-Datenbank
+                    </DialogDescription>
+                  </DialogHeader>
+                  {selectedProvider && (
+                    <div className="space-y-4 py-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Domain</Label>
+                          <div className="font-medium">{selectedProvider.domain === 'tech' ? 'Technology' : 'Service'}</div>
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Kategorie</Label>
+                          <div className="font-medium">{selectedProvider.category.replace(/-/g, ' ')}</div>
+                        </div>
+                      </div>
+                      
+                      <div>
+                        <Label className="text-xs text-muted-foreground">Beschreibung</Label>
+                        <div className="text-sm">{selectedProvider.shortDescription}</div>
+                      </div>
+
+                      {(selectedProvider.address.street || selectedProvider.address.city) && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Adresse</Label>
+                          <div className="text-sm">
+                            {selectedProvider.address.street && <div>{selectedProvider.address.street}</div>}
+                            <div>
+                              {selectedProvider.address.postalCode} {selectedProvider.address.city}
+                              {selectedProvider.address.country && `, ${selectedProvider.address.country}`}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 gap-4">
+                        {selectedProvider.ceo?.name && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">CEO / Geschäftsführer</Label>
+                            <div className="font-medium">{selectedProvider.ceo.name}</div>
+                            {selectedProvider.ceo.email && (
+                              <a href={`mailto:${selectedProvider.ceo.email}`} className="text-sm text-blue-600 hover:underline">
+                                {selectedProvider.ceo.email}
+                              </a>
+                            )}
+                          </div>
+                        )}
+                        {selectedProvider.salesContact?.name && (
+                          <div>
+                            <Label className="text-xs text-muted-foreground">Sales-Kontakt</Label>
+                            <div className="font-medium">{selectedProvider.salesContact.name}</div>
+                            {selectedProvider.salesContact.email && (
+                              <a href={`mailto:${selectedProvider.salesContact.email}`} className="text-sm text-blue-600 hover:underline">
+                                {selectedProvider.salesContact.email}
+                              </a>
+                            )}
+                          </div>
+                        )}
+                      </div>
+
+                      {selectedProvider.website && (
+                        <div>
+                          <Label className="text-xs text-muted-foreground">Website</Label>
+                          <a 
+                            href={selectedProvider.website}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-600 hover:underline flex items-center gap-1"
+                          >
+                            {selectedProvider.website}
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      )}
+
+                      <div className="pt-4 border-t">
+                        <Label className="text-xs text-muted-foreground">Kundenstatus</Label>
+                        <div className="flex items-center gap-2 mt-1">
+                          <Badge variant="outline" className="bg-gray-100">Freemium</Badge>
+                          <span className="text-sm text-muted-foreground">→</span>
+                          <Button size="sm" variant="outline">
+                            <UserPlus className="h-4 w-4 mr-1" />
+                            Zu Prospect machen
+                          </Button>
+                          <Button size="sm">
+                            <FileCheck className="h-4 w-4 mr-1" />
+                            Als Kunde anlegen
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setIsProviderDetailOpen(false)}>
+                      Schließen
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+            </CardContent>
+          </Card>
+        </TabsContent>
 
         {/* Signed Customers Tab */}
         <TabsContent value="signed">
