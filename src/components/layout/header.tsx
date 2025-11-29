@@ -1,8 +1,7 @@
 'use client';
 
-import { Bell, Search, User } from 'lucide-react';
+import { Bell, User } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -14,16 +13,7 @@ import {
 
 export function Header() {
   return (
-    <header className="flex h-16 items-center justify-between border-b bg-background px-6">
-      {/* Search */}
-      <div className="relative w-96">
-        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-        <Input
-          type="search"
-          placeholder="Suchen..."
-          className="pl-8 bg-muted/50"
-        />
-      </div>
+    <header className="flex h-16 items-center justify-end border-b bg-background px-6">
 
       {/* Right side */}
       <div className="flex items-center gap-4">

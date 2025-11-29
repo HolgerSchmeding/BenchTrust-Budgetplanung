@@ -418,6 +418,40 @@ export default function KundenplanungPage() {
     }
   };
 
+  // Provider zu Signed Customer konvertieren
+  const handleConvertProviderToCustomer = (provider: ProviderAsCustomer) => {
+    const newCustomer: SignedCustomer = {
+      id: `c${Date.now()}`,
+      companyName: provider.companyName,
+      contactPerson: provider.ceo?.name || provider.salesContact?.name || '',
+      pricingModel: 'showcase', // Standard-Preismodell
+      addOns: [],
+      startMonth: new Date().getMonth(),
+      endMonth: 11,
+      contractType: 'monthly',
+      status: 'active',
+      signedDate: new Date().toISOString().split('T')[0],
+    };
+    setEditingCustomer(newCustomer);
+    setIsProviderDetailOpen(false);
+    setIsEditCustomerOpen(true);
+  };
+
+  // Provider zu Prospect konvertieren
+  const handleConvertProviderToProspect = (provider: ProviderAsCustomer) => {
+    setNewProspect({
+      count: 1,
+      pricingModel: 'showcase',
+      addOns: [],
+      expectedStartMonth: new Date().getMonth(),
+      contractType: 'monthly',
+      conversionProbability: 50,
+      notes: `Konvertiert von Provider: ${provider.companyName}`,
+    });
+    setIsProviderDetailOpen(false);
+    setIsAddProspectOpen(true);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -881,11 +915,18 @@ export default function KundenplanungPage() {
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className="bg-gray-100">Freemium</Badge>
                           <span className="text-sm text-muted-foreground">→</span>
-                          <Button size="sm" variant="outline">
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => selectedProvider && handleConvertProviderToProspect(selectedProvider)}
+                          >
                             <UserPlus className="h-4 w-4 mr-1" />
                             Zu Prospect machen
                           </Button>
-                          <Button size="sm">
+                          <Button 
+                            size="sm"
+                            onClick={() => selectedProvider && handleConvertProviderToCustomer(selectedProvider)}
+                          >
                             <FileCheck className="h-4 w-4 mr-1" />
                             Als Kunde anlegen
                           </Button>
